@@ -55,5 +55,20 @@ The Likeness licensing contracts come from **[likeness-arc](https://github.com/r
 Mutation runs: without the executed-payment check, 9 tests fail; without the counts-once check, 2
 fail. The README says plainly what the chain proves and what the creator's agent attests.
 
-Still to come, recorded here as it lands: the creator and brand agents (A2A, AP2 mandates), the HSP
-Gateway integration, the app, and the mainnet deployment.
+**Agents and the HSP client (new, `agents/`):**
+- A2A creator agent (receiving agent and HSP merchant) and brand agent (payment agent).
+- An HSP client: HMAC request signing, the ES256K cart JWT over the RFC 8785 cart hash, the AP2 Cart
+  and Payment Mandates, EIP-3009 and Permit2 signatures, webhook verification, status polling.
+- A render agent and a message log.
+- A local HSP Gateway emulator for tests.
+
+27 tests:
+- interop with `jose`, the JWT library HashKey's Node SDK uses;
+- HMAC checked against the docs' `openssl` procedure;
+- end to end on a local chain, on both rails and both nonce modes, including the refusals.
+
+A test double was corrected along the way: `MockPermit2` now has the real Permit2 EIP-712 domain,
+which has no version field.
+
+Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive), the app,
+and the mainnet deployment.
