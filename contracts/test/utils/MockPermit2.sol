@@ -3,12 +3,13 @@ pragma solidity ^0.8.30;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 /// @dev Tests only. The signature-transfer half of Uniswap's Permit2 (deployed on HSK Chain at
-///      0x000000000022D473030F116dDEE9F6B43aC78BA3): unordered nonces in a bitmap, one bit per nonce.
-contract MockPermit2 is EIP712 {
+///      0x000000000022D473030F116dDEE9F6B43aC78BA3): unordered nonces in a bitmap, one bit per nonce,
+///      and Permit2's EIP-712 domain, which has no version: EIP712Domain(name, chainId, verifyingContract).
+contract MockPermit2 {
     using SafeERC20 for IERC20;
 
     struct TokenPermissions {
@@ -34,11 +35,18 @@ contract MockPermit2 is EIP712 {
 
     mapping(address owner => mapping(uint256 wordPos => uint256)) public nonceBitmap;
 
-    constructor() EIP712("Permit2", "") {}
+    bytes32 private constant DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
+
+    // solhint-disable-next-line func-name-mixedcase
+    function DOMAIN_SEPARATOR() public view returns (bytes32) {
+        return keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256("Permit2"), block.chainid, address(this)));
+    }
 
     function permitDigest(PermitTransferFrom calldata permit, address spender) public view returns (bytes32) {
         bytes32 permitted = keccak256(abi.encode(TOKEN_PERMISSIONS_TYPEHASH, permit.permitted));
-        return _hashTypedDataV4(
+        return MessageHashUtils.toTypedDataHash(
+            DOMAIN_SEPARATOR(),
             keccak256(abi.encode(PERMIT_TRANSFER_FROM_TYPEHASH, permitted, spender, permit.nonce, permit.deadline))
         );
     }
