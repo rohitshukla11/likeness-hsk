@@ -1,0 +1,27 @@
+{
+  "name": "likeness-hsk-agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A2A creator and brand agents, the HSP Gateway client and a local Gateway emulator for Likeness on HSK Chain",
+  "license": "MIT",
+  "packageManager": "pnpm@12.5.1",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "abi": "tsx scripts/abi.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "viem": "2.57.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "jose": "5.10.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}
