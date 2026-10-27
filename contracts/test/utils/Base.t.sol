@@ -29,11 +29,17 @@ abstract contract Base is Test {
         creators = new CreatorRegistry(platform, attester);
         licences = new LicenseRegistry(platform, creators);
         receipts = new ReceiptAnchor(platform);
-        _wireSettlement(makeAddr("settlement"));
+        _wireSettlement(_deploySettlement());
+    }
+
+    /// @dev Suites that exercise payments deploy HspSettlement here; the registry suites only need an
+    ///      address to stand in for it.
+    function _deploySettlement() internal virtual returns (address) {
+        return makeAddr("settlement");
     }
 
     /// @dev The settlement contract is the only writer of renders and receipts.
-    function _wireSettlement(address settlement) internal virtual {
+    function _wireSettlement(address settlement) internal {
         vm.startPrank(platform);
         licences.setSettlement(settlement);
         receipts.setSettlement(settlement);
