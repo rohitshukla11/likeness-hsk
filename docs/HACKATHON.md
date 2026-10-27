@@ -29,26 +29,31 @@ The Likeness licensing contracts come from **[likeness-arc](https://github.com/r
 | 27 Oct 16:11 | `5510455` | New repository: licence, README, ignore rules for secrets and keystores |
 | 27 Oct 16:13 | `95f0690` | Port to HSK Chain: `evm_version` cancun (checked against mainnet), HSK RPC endpoints, settlement role |
 | 27 Oct 16:26 | `3942151` | **`HspSettlement`**, the HSP payment binding, with 34 new tests and an HSK mainnet fork suite |
+| 27 Oct 17:14 | (this commit) | `recordPayment` takes the nonce that actually executed, so payments still work if the HSP Gateway picks the nonce. Each nonce counts once, and every payment records whether its nonce was bound to the render. 8 more tests |
 
 **`HspSettlement` (new):**
-- A render is recorded only after the brand's stablecoin authorization for **exactly that render**
-  has executed on chain.
-  - The payment agent signs with the nonce `keccak256(settlement, chainId, licenceId, renderIndex)`.
-  - The contract checks USDC.e's `authorizationState(payer, nonce)` (EIP-3009), or the Permit2 nonce
-    bitmap for the USDT fallback.
+- A render is recorded only after the licensee's stablecoin authorization has executed on chain.
+  The contract checks USDC.e's `authorizationState(payer, nonce)` (EIP-3009), or the Permit2 nonce
+  bitmap for the USDT fallback.
+  - **Bound nonce:** when the payment agent signs with
+    `keccak256(settlement, chainId, licenceId, renderIndex)`, the chain shows the payment was for
+    exactly that render.
+  - **Gateway nonce:** otherwise, the creator's agent records the nonce that executed. Each nonce
+    counts once.
 - Only the creator's own agent records, and it must report the licence price. The HSP transaction
   hash is stored once per payment.
 - Receipts are anchored only for paid renders, with a render agent's signature over the file hash.
 - Revoked, expired or used-up licences take no further payments.
 
 **Tests:**
-- **USDC.e rail:** 29 tests.
-- **Permit2 rail:** 5 tests.
+- **USDC.e rail:** 36 tests.
+- **Permit2 rail:** 6 tests.
 - **Reused:** the 29 registry tests.
 - **HSK mainnet fork:** 3 tests. They execute a real USDC.e `transferWithAuthorization` and a real
   Permit2 transfer against chain 177 state in a local fork; nothing is broadcast.
 
-A mutation run without the nonce check makes 6 tests fail.
+Mutation runs: without the executed-payment check, 9 tests fail; without the counts-once check, 2
+fail. The README says plainly what the chain proves and what the creator's agent attests.
 
 Still to come, recorded here as it lands: the creator and brand agents (A2A, AP2 mandates), the HSP
 Gateway integration, the app, and the mainnet deployment.

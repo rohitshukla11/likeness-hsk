@@ -28,6 +28,8 @@ contract HspSettlementTest is HspBase {
         assertEq(p.payer, brand);
         assertEq(p.amount, PRICE);
         assertEq(p.hspTxHash, txHash);
+        assertTrue(p.nonceBound);
+        assertEq(p.nonce, settlement.paymentNonce(id, 0));
         assertTrue(settlement.txUsed(txHash));
     }
 
@@ -37,7 +39,7 @@ contract HspSettlementTest is HspBase {
         bytes32 nonce = settlement.paymentNonce(id, 0);
         bytes32 ref = keccak256(abi.encode("hsp-payment", id, uint32(0)));
         vm.expectEmit(address(settlement));
-        emit HspSettlement.PaymentRecorded(id, 0, brand, payout, PRICE, nonce, keccak256("tx"), ref);
+        emit HspSettlement.PaymentRecorded(id, 0, brand, payout, PRICE, nonce, true, keccak256("tx"), ref);
         _record(id, 0, PRICE, keccak256("tx"));
     }
 
@@ -125,9 +127,8 @@ contract HspSettlementTest is HspBase {
         _payWithNonce(settlement.paymentNonce(otherLicence, otherIndex), payout, PRICE);
         _payWithNonce(randomNonce, payout, PRICE);
         assertFalse(settlement.paymentExecuted(id, 0));
-        vm.prank(creatorAgent);
         vm.expectRevert();
-        settlement.recordPayment(id, 0, PRICE, keccak256("tx"), bytes32(0));
+        _record(id, 0, PRICE, keccak256("tx"));
     }
 
     // ---------------------------------------------------------------- who and what may be recorded
@@ -135,11 +136,12 @@ contract HspSettlementTest is HspBase {
     function test_record_onlyTheCreatorsAgent() public {
         uint256 id = _license(brand, 3);
         _pay(id, 0, payout, PRICE);
+        bytes32 nonce = settlement.paymentNonce(id, 0);
         address[3] memory callers = [brand, creator, platform];
         for (uint256 i; i < callers.length; ++i) {
             vm.prank(callers[i]);
             vm.expectRevert(HspSettlement.NotCreatorAgent.selector);
-            settlement.recordPayment(id, 0, PRICE, keccak256("tx"), bytes32(0));
+            settlement.recordPayment(id, 0, nonce, PRICE, keccak256("tx"), bytes32(0));
         }
     }
 
@@ -148,9 +150,8 @@ contract HspSettlementTest is HspBase {
         vm.prank(creator);
         settlement.setAgent(address(0));
         _pay(id, 0, payout, PRICE);
-        vm.prank(creatorAgent);
         vm.expectRevert(HspSettlement.NotCreatorAgent.selector);
-        settlement.recordPayment(id, 0, PRICE, keccak256("tx"), bytes32(0));
+        _record(id, 0, PRICE, keccak256("tx"));
     }
 
     function test_setAgent_onlyRegisteredCreator() public {
@@ -298,6 +299,92 @@ contract HspSettlementTest is HspBase {
         vm.prank(brand);
         vm.expectRevert();
         settlement.setRenderAgent(brand, true);
+    }
+
+    // ---------------------------------------------------------------- the HSP Gateway picks the nonce
+
+    function test_gatewayNonce_recordsTheNonceThatExecuted() public {
+        uint256 id = _license(brand, 3);
+        bytes32 gatewayNonce = keccak256("nonce chosen by the HSP Gateway");
+        _payWithNonce(gatewayNonce, payout, PRICE);
+        assertFalse(settlement.paymentExecuted(id, 0), "the bound nonce was not used");
+
+        _recordWithNonce(id, 0, gatewayNonce, PRICE, keccak256("tx"));
+        HspSettlement.Payment memory p = settlement.payment(id, 0);
+        assertFalse(p.nonceBound);
+        assertEq(p.nonce, gatewayNonce);
+        assertTrue(settlement.nonceRecorded(brand, gatewayNonce));
+        assertEq(licences.licence(id).renderCount, 1);
+    }
+
+    function test_gatewayNonce_emitsUnbound() public {
+        uint256 id = _license(brand, 3);
+        bytes32 gatewayNonce = keccak256("gateway");
+        _payWithNonce(gatewayNonce, payout, PRICE);
+        vm.expectEmit(address(settlement));
+        emit HspSettlement.PaymentRecorded(
+            id,
+            0,
+            brand,
+            payout,
+            PRICE,
+            gatewayNonce,
+            false,
+            keccak256("tx"),
+            keccak256(abi.encode("hsp-payment", id, uint32(0)))
+        );
+        _recordWithNonce(id, 0, gatewayNonce, PRICE, keccak256("tx"));
+    }
+
+    function test_gatewayNonce_revertsWhenNotExecutedYet() public {
+        uint256 id = _license(brand, 3);
+        bytes32 gatewayNonce = keccak256("gateway");
+        vm.expectRevert(abi.encodeWithSelector(HspSettlement.PaymentNotExecuted.selector, brand, gatewayNonce));
+        _recordWithNonce(id, 0, gatewayNonce, PRICE, keccak256("tx"));
+    }
+
+    function test_gatewayNonce_countsOnce() public {
+        uint256 a = _license(brand, 3);
+        uint256 b = _license(brand, 3);
+        bytes32 gatewayNonce = keccak256("gateway");
+        _payWithNonce(gatewayNonce, payout, PRICE);
+        _recordWithNonce(a, 0, gatewayNonce, PRICE, keccak256("tx-a0"));
+        // The same executed authorization can't pay for another render, of this licence or another.
+        vm.expectRevert(abi.encodeWithSelector(HspSettlement.NonceAlreadyRecorded.selector, brand, gatewayNonce));
+        _recordWithNonce(a, 1, gatewayNonce, PRICE, keccak256("tx-a1"));
+        vm.expectRevert(abi.encodeWithSelector(HspSettlement.NonceAlreadyRecorded.selector, brand, gatewayNonce));
+        _recordWithNonce(b, 0, gatewayNonce, PRICE, keccak256("tx-b0"));
+    }
+
+    function test_boundNonce_cannotPayForAnotherRender() public {
+        uint256 id = _license(brand, 3);
+        _payAndRecord(id);
+        bytes32 used = settlement.paymentNonce(id, 0);
+        vm.expectRevert(abi.encodeWithSelector(HspSettlement.NonceAlreadyRecorded.selector, brand, used));
+        _recordWithNonce(id, 1, used, PRICE, keccak256("tx-1"));
+    }
+
+    function test_gatewayNonce_onlyTheLicenseesAuthorizationCounts() public {
+        uint256 id = _license(brand, 3);
+        (address other, uint256 otherPk) = makeAddrAndKey("other");
+        usdc.mint(other, PRICE);
+        bytes32 gatewayNonce = keccak256("gateway");
+        uint256 validBefore = block.timestamp + 10 minutes;
+        bytes memory sig = _sign(otherPk, usdc.authorizationDigest(other, payout, PRICE, 0, validBefore, gatewayNonce));
+        vm.prank(gateway);
+        usdc.transferWithAuthorization(other, payout, PRICE, 0, validBefore, gatewayNonce, sig);
+        vm.expectRevert(abi.encodeWithSelector(HspSettlement.PaymentNotExecuted.selector, brand, gatewayNonce));
+        _recordWithNonce(id, 0, gatewayNonce, PRICE, keccak256("tx"));
+    }
+
+    function test_gatewayNonce_revokedStillStops() public {
+        uint256 id = _license(brand, 3);
+        vm.prank(creator);
+        licences.revoke(id);
+        bytes32 gatewayNonce = keccak256("gateway");
+        _payWithNonce(gatewayNonce, payout, PRICE);
+        vm.expectRevert(abi.encodeWithSelector(LicenseRegistry.NotActive.selector, LicenseRegistry.Status.Revoked));
+        _recordWithNonce(id, 0, gatewayNonce, PRICE, keccak256("tx"));
     }
 
     // ---------------------------------------------------------------- helpers

@@ -127,7 +127,7 @@ contract HskMainnetForkTest is Base {
         assertFalse(USDC_E.authorizationState(brand, nonce));
         vm.prank(creatorAgent);
         vm.expectRevert(abi.encodeWithSelector(HspSettlement.PaymentNotExecuted.selector, brand, nonce));
-        settlement.recordPayment(id, 0, PRICE, keccak256("tx"), bytes32(0));
+        settlement.recordPayment(id, 0, nonce, PRICE, keccak256("tx"), bytes32(0));
 
         // The brand signs against the real token; the Gateway executes it.
         uint256 validBefore = block.timestamp + 10 minutes;
@@ -136,7 +136,9 @@ contract HskMainnetForkTest is Base {
                 "\x19\x01",
                 USDC_E.DOMAIN_SEPARATOR(),
                 keccak256(
-                    abi.encode(USDC_E.TRANSFER_WITH_AUTHORIZATION_TYPEHASH(), brand, payout, PRICE, 0, validBefore, nonce)
+                    abi.encode(
+                        USDC_E.TRANSFER_WITH_AUTHORIZATION_TYPEHASH(), brand, payout, PRICE, 0, validBefore, nonce
+                    )
                 )
             )
         );
@@ -148,7 +150,7 @@ contract HskMainnetForkTest is Base {
         assertTrue(settlement.paymentExecuted(id, 0));
 
         vm.prank(creatorAgent);
-        settlement.recordPayment(id, 0, PRICE, keccak256("tx"), bytes32(0));
+        settlement.recordPayment(id, 0, nonce, PRICE, keccak256("tx"), bytes32(0));
         bytes32 file = keccak256("render-0.jpg");
         uint64 deadline = uint64(block.timestamp + 5 minutes);
         bytes memory sig = _sign(renderAgentPk, settlement.renderDigest(id, file, 0, deadline));
@@ -190,7 +192,10 @@ contract HskMainnetForkTest is Base {
         uint256 before = USDT.balanceOf(payout);
         vm.prank(gateway);
         PERMIT2.permitTransferFrom(
-            permit, MockPermit2.SignatureTransferDetails({to: payout, requestedAmount: PRICE}), brand, _sign(brandPk, digest)
+            permit,
+            MockPermit2.SignatureTransferDetails({to: payout, requestedAmount: PRICE}),
+            brand,
+            _sign(brandPk, digest)
         );
         assertEq(USDT.balanceOf(payout) - before, PRICE);
         assertTrue(settlementUsdt.paymentExecuted(id, 0));

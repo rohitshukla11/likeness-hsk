@@ -31,8 +31,7 @@ abstract contract HspBase is Base {
         permit2 = new MockPermit2();
         HspSettlement.Rail rail = _rail();
         address token = rail == HspSettlement.Rail.Eip3009 ? address(usdc) : address(usdt);
-        settlement =
-            new HspSettlement(platform, rail, token, IPermit2Nonces(address(permit2)), licences, receipts);
+        settlement = new HspSettlement(platform, rail, token, IPermit2Nonces(address(permit2)), licences, receipts);
         return address(settlement);
     }
 
@@ -82,9 +81,20 @@ abstract contract HspBase is Base {
         }
     }
 
+    /// @dev The creator's agent records with the bound nonce (the payment agent chose it).
     function _record(uint256 id, uint32 renderIndex, uint128 amount, bytes32 txHash) internal {
+        // Computed here, not read from the contract, so `vm.expectRevert` applies to recordPayment.
+        // test_nonce_bindsContractChainLicenceAndRender checks it matches paymentNonce.
+        bytes32 nonce = keccak256(abi.encode(address(settlement), block.chainid, id, renderIndex));
+        _recordWithNonce(id, renderIndex, nonce, amount, txHash);
+    }
+
+    /// @dev The creator's agent records the nonce the executed authorization actually used.
+    function _recordWithNonce(uint256 id, uint32 renderIndex, bytes32 nonce, uint128 amount, bytes32 txHash) internal {
         vm.prank(creatorAgent);
-        settlement.recordPayment(id, renderIndex, amount, txHash, keccak256(abi.encode("hsp-payment", id, renderIndex)));
+        settlement.recordPayment(
+            id, renderIndex, nonce, amount, txHash, keccak256(abi.encode("hsp-payment", id, renderIndex))
+        );
     }
 
     function _payAndRecord(uint256 id) internal returns (uint32 renderIndex) {
@@ -103,6 +113,8 @@ abstract contract HspBase is Base {
 
     function _anchor(uint256 id, uint32 renderIndex, bytes32 assetHash) internal {
         uint64 deadline = uint64(block.timestamp + 5 minutes);
-        settlement.anchorRender(id, renderIndex, assetHash, renderAgent, deadline, _renderSig(id, assetHash, renderIndex, deadline));
+        settlement.anchorRender(
+            id, renderIndex, assetHash, renderAgent, deadline, _renderSig(id, assetHash, renderIndex, deadline)
+        );
     }
 }

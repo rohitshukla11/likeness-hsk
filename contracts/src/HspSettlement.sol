@@ -24,16 +24,20 @@ interface IPermit2Nonces {
 ///         for USDC.e, Permit2 for USDT) inside an AP2 Payment Mandate, and the Gateway executes it,
 ///         paying the creator's payout directly. Nothing is held here and nothing is refunded: a render
 ///         is paid for one at a time, and a revoked, expired or used-up licence stops the next one.
-/// @dev The payment is bound to the render on chain. The payment agent must use the nonce
-///      `paymentNonce(licenceId, renderIndex)`, so the token's own nonce registry shows whether the
-///      licensee's authorization for exactly this render has executed. A render is recorded only if
-///      it has, and only once (renders are recorded in order, each index once).
-///      What the token registry cannot show is the amount and recipient of that authorization. Those
-///      are attested by the creator's agent, the only party that may record a payment for the
-///      creator: it receives the HSP webhook, reads the transfer from the transaction, and passes the
-///      transaction hash, which is stored with the payment for anyone to audit. The brand cannot
-///      underpay (the creator's agent checks the amount it received); the creator's agent can only
-///      act for its own creator.
+/// @dev A render is recorded only if the licensee's stablecoin authorization has executed on chain,
+///      read from the token's own nonce registry, and each authorization counts once.
+///      - Bound nonce (preferred): when the payment agent may choose the nonce, it uses
+///        `paymentNonce(licenceId, renderIndex)`, so the chain itself shows that the payment for
+///        exactly this render executed. Recorded with `nonceBound = true`.
+///      - Gateway nonce: if the HSP Gateway picks the nonce, the creator's agent records the nonce
+///        the executed authorization actually used. The chain still shows that the licensee's
+///        authorization with that nonce executed and that it is counted only once; which licence and
+///        render it paid for is the creator agent's attestation. Recorded with `nonceBound = false`.
+///      In both cases the amount and recipient are attested by the creator's agent, the only party
+///      that may record a payment for the creator: it receives the HSP webhook, reads the transfer
+///      from the transaction, and passes the transaction hash, stored with the payment for anyone to
+///      audit. The brand cannot underpay (the creator's agent checks what it received); the
+///      creator's agent can only act for its own creator.
 contract HspSettlement is Ownable2Step, EIP712 {
     enum Rail {
         Eip3009, // USDC.e: TransferWithAuthorization, nonces in authorizationState
@@ -44,6 +48,8 @@ contract HspSettlement is Ownable2Step, EIP712 {
         address payer;
         uint64 recordedAt;
         uint128 amount;
+        bool nonceBound; // the nonce was paymentNonce(licenceId, renderIndex)
+        bytes32 nonce; // the authorization nonce that executed
         bytes32 hspTxHash; // the on-chain transaction the HSP Gateway broadcast
         bytes32 hspPaymentRef; // keccak256 of HSP's payment_request_id (the AP2 Payment Mandate id)
         bytes32 assetHash; // sha256 of the delivered file, once anchored
@@ -62,6 +68,7 @@ contract HspSettlement is Ownable2Step, EIP712 {
     mapping(address creator => address agent) public agentOf;
     mapping(address agent => bool) public isRenderAgent;
     mapping(bytes32 hspTxHash => bool) public txUsed;
+    mapping(address payer => mapping(bytes32 nonce => bool)) public nonceRecorded;
     mapping(uint256 licenceId => mapping(uint32 renderIndex => Payment)) private _payments;
 
     event AgentSet(address indexed creator, address indexed agent);
@@ -73,6 +80,7 @@ contract HspSettlement is Ownable2Step, EIP712 {
         address payout,
         uint128 amount,
         bytes32 nonce,
+        bool nonceBound,
         bytes32 hspTxHash,
         bytes32 hspPaymentRef
     );
@@ -86,6 +94,7 @@ contract HspSettlement is Ownable2Step, EIP712 {
     error ZeroTxHash();
     error TxAlreadyUsed(bytes32 hspTxHash);
     error PaymentNotExecuted(address payer, bytes32 nonce);
+    error NonceAlreadyRecorded(address payer, bytes32 nonce);
     error NotPaid(uint256 licenceId, uint32 renderIndex);
     error AlreadyAnchored(uint256 licenceId, uint32 renderIndex);
     error NotRenderAgent();
@@ -131,10 +140,13 @@ contract HspSettlement is Ownable2Step, EIP712 {
     /// @notice Record the HSP payment for the next render of a licence. Called by the creator's agent
     ///         after the Gateway reports the payment and the agent has checked the transfer.
     /// @param renderIndex Must be the licence's next render (its current render count).
+    /// @param nonce The nonce of the licensee's executed authorization: `paymentNonce(licenceId,
+    ///        renderIndex)` when the payment agent chose it, otherwise the one the Gateway used.
     /// @param amount What the creator's payout received; must equal the licence price.
     function recordPayment(
         uint256 licenceId,
         uint32 renderIndex,
+        bytes32 nonce,
         uint128 amount,
         bytes32 hspTxHash,
         bytes32 hspPaymentRef
@@ -147,22 +159,34 @@ contract HspSettlement is Ownable2Step, EIP712 {
         if (hspTxHash == bytes32(0)) revert ZeroTxHash();
         if (txUsed[hspTxHash]) revert TxAlreadyUsed(hspTxHash);
 
-        bytes32 nonce = paymentNonce(licenceId, renderIndex);
+        if (nonceRecorded[l.licensee][nonce]) revert NonceAlreadyRecorded(l.licensee, nonce);
         if (!_nonceUsed(l.licensee, nonce)) revert PaymentNotExecuted(l.licensee, nonce);
+        bool bound = nonce == paymentNonce(licenceId, renderIndex);
 
         // Reverts unless the licence is Active (not revoked, expired or used up).
         licences.recordRender(licenceId);
         txUsed[hspTxHash] = true;
+        nonceRecorded[l.licensee][nonce] = true;
         _payments[licenceId][renderIndex] = Payment({
             payer: l.licensee,
             recordedAt: uint64(block.timestamp),
             amount: amount,
+            nonceBound: bound,
+            nonce: nonce,
             hspTxHash: hspTxHash,
             hspPaymentRef: hspPaymentRef,
             assetHash: bytes32(0)
         });
         emit PaymentRecorded(
-            licenceId, renderIndex, l.licensee, creators.payoutOf(l.creator), amount, nonce, hspTxHash, hspPaymentRef
+            licenceId,
+            renderIndex,
+            l.licensee,
+            creators.payoutOf(l.creator),
+            amount,
+            nonce,
+            bound,
+            hspTxHash,
+            hspPaymentRef
         );
     }
 
@@ -199,7 +223,7 @@ contract HspSettlement is Ownable2Step, EIP712 {
         return keccak256(abi.encode(address(this), block.chainid, licenceId, renderIndex));
     }
 
-    /// @notice Whether the licensee's authorization for this render has executed on chain.
+    /// @notice Whether the licensee's authorization with this render's bound nonce has executed.
     function paymentExecuted(uint256 licenceId, uint32 renderIndex) external view returns (bool) {
         return _nonceUsed(licences.licence(licenceId).licensee, paymentNonce(licenceId, renderIndex));
     }

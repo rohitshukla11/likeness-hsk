@@ -60,4 +60,17 @@ contract HspSettlementPermit2Test is HspBase {
             platform, HspSettlement.Rail.Permit2, address(usdt), IPermit2Nonces(address(0)), licences, receipts
         );
     }
+
+    function test_permit2_gatewayNonce_recordsTheNonceThatExecuted() public {
+        uint256 id = _license(brand, 3);
+        bytes32 gatewayNonce = keccak256("permit2 nonce chosen by the HSP Gateway");
+        vm.expectRevert(abi.encodeWithSelector(HspSettlement.PaymentNotExecuted.selector, brand, gatewayNonce));
+        _recordWithNonce(id, 0, gatewayNonce, PRICE, keccak256("tx"));
+
+        _payWithNonce(gatewayNonce, payout, PRICE);
+        _recordWithNonce(id, 0, gatewayNonce, PRICE, keccak256("tx"));
+        HspSettlement.Payment memory p = settlement.payment(id, 0);
+        assertFalse(p.nonceBound);
+        assertEq(p.nonce, gatewayNonce);
+    }
 }
