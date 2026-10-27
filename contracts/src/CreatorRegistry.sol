@@ -28,7 +28,7 @@ contract CreatorRegistry is Ownable2Step, EIP712 {
         uint32 regions; // bitmask, non-empty
         uint64 maxDuration; // seconds
         uint32 maxRenders; // per licence
-        uint128 pricePerRender; // USDC, 6 decimals
+        uint128 pricePerRender; // stablecoin base units (USDC.e on HSK Chain: 6 decimals)
         bool autoApprove; // licences matching these terms need no creator signature
     }
 
@@ -124,8 +124,8 @@ contract CreatorRegistry is Ownable2Step, EIP712 {
         emit ActiveSet(msg.sender, active);
     }
 
-    /// @notice One click: every licence issued so far is revoked. New renders are refused and unused
-    ///         escrow becomes refundable.
+    /// @notice One click: every licence issued so far is revoked. No further render can be paid for or
+    ///         recorded under them.
     function revokeAll() external {
         Creator storage c = _registered(msg.sender);
         emit AllRevoked(msg.sender, ++c.epoch);

@@ -20,7 +20,8 @@ interface IERC5192 {
 /// @notice A licence is a non-transferable, expiring ERC-721 (locked per ERC-5192) held by the
 ///         licensee. It is issued either against the creator's EIP-712 approval of the exact deal, or
 ///         automatically when the creator has opted in and the request fits their published terms.
-/// @dev Write rights: the licensee requests, the creator revokes, only LicenseEscrow counts renders.
+/// @dev Write rights: the licensee requests, the creator revokes, only HspSettlement counts renders
+///      (one per HSP payment recorded).
 contract LicenseRegistry is ERC721, IERC5192, Ownable2Step, EIP712 {
     enum Status {
         Unknown,
@@ -36,7 +37,7 @@ contract LicenseRegistry is ERC721, IERC5192, Ownable2Step, EIP712 {
         uint32 regions;
         uint64 duration; // seconds from issue
         uint32 renderCap;
-        uint128 pricePerRender; // USDC, 6 decimals
+        uint128 pricePerRender; // stablecoin base units (USDC.e on HSK Chain: 6 decimals)
         bytes32 purposeHash; // hash of the off-chain brief (brand, campaign, intended use)
         uint64 deadline; // for the creator's signature
         bytes32 salt; // lets a creator approve the same deal more than once
@@ -63,13 +64,13 @@ contract LicenseRegistry is ERC721, IERC5192, Ownable2Step, EIP712 {
     bytes4 private constant ERC5192_INTERFACE_ID = 0xb45a3c0e;
 
     CreatorRegistry public immutable creators;
-    address public escrow;
+    address public settlement;
     uint256 public licenceCount;
 
     mapping(uint256 id => Licence) private _licences;
     mapping(bytes32 digest => bool) public approvalUsed;
 
-    event EscrowSet(address indexed escrow);
+    event SettlementSet(address indexed settlement);
     event LicenceIssued(
         uint256 indexed id,
         address indexed creator,
@@ -87,8 +88,8 @@ contract LicenseRegistry is ERC721, IERC5192, Ownable2Step, EIP712 {
 
     error Soulbound();
     error NotCreator();
-    error NotEscrow();
-    error EscrowAlreadySet();
+    error NotSettlement();
+    error SettlementAlreadySet();
     error ZeroAddress();
     error CreatorUnavailable();
     error BadRequest();
@@ -106,12 +107,12 @@ contract LicenseRegistry is ERC721, IERC5192, Ownable2Step, EIP712 {
         creators = creators_;
     }
 
-    /// @notice Wire the escrow once; it alone may record renders.
-    function setEscrow(address escrow_) external onlyOwner {
-        if (escrow != address(0)) revert EscrowAlreadySet();
-        if (escrow_ == address(0)) revert ZeroAddress();
-        escrow = escrow_;
-        emit EscrowSet(escrow_);
+    /// @notice Wire the settlement once; it alone may record renders.
+    function setSettlement(address settlement_) external onlyOwner {
+        if (settlement != address(0)) revert SettlementAlreadySet();
+        if (settlement_ == address(0)) revert ZeroAddress();
+        settlement = settlement_;
+        emit SettlementSet(settlement_);
     }
 
     // ---------------------------------------------------------------- licensee
@@ -177,11 +178,11 @@ contract LicenseRegistry is ERC721, IERC5192, Ownable2Step, EIP712 {
         emit LicenceRevoked(id, msg.sender);
     }
 
-    // ---------------------------------------------------------------- escrow
+    // ---------------------------------------------------------------- settlement
 
     /// @return renderIndex Zero-based index of this render within the licence.
     function recordRender(uint256 id) external returns (uint32 renderIndex) {
-        if (msg.sender != escrow) revert NotEscrow();
+        if (msg.sender != settlement) revert NotSettlement();
         Status s = status(id);
         if (s != Status.Active) revert NotActive(s);
         renderIndex = _licences[id].renderCount++;

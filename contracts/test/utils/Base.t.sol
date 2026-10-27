@@ -5,26 +5,18 @@ import {Test} from "forge-std/Test.sol";
 import {Categories} from "../../src/Categories.sol";
 import {CreatorRegistry} from "../../src/CreatorRegistry.sol";
 import {LicenseRegistry} from "../../src/LicenseRegistry.sol";
-import {LicenseEscrow} from "../../src/LicenseEscrow.sol";
 import {ReceiptAnchor} from "../../src/ReceiptAnchor.sol";
-import {MockUSDC} from "./MockUSDC.sol";
 
 abstract contract Base is Test {
-    uint16 internal constant FEE_BPS = 1_000; // 10%
-    uint128 internal constant PRICE = 2_000_000; // 2 USDC
+    uint128 internal constant PRICE = 50_000; // 0.05 USDC.e
 
-    MockUSDC internal usdc;
     CreatorRegistry internal creators;
     LicenseRegistry internal licences;
     ReceiptAnchor internal receipts;
-    LicenseEscrow internal escrow;
 
     address internal platform = makeAddr("platform");
-    address internal treasury = makeAddr("treasury");
     uint256 internal attesterPk;
     address internal attester;
-    uint256 internal agentPk;
-    address internal agent;
     uint256 internal creatorPk;
     address internal creator;
     address internal payout = makeAddr("payout");
@@ -32,18 +24,19 @@ abstract contract Base is Test {
 
     function setUp() public virtual {
         (attester, attesterPk) = makeAddrAndKey("attester");
-        (agent, agentPk) = makeAddrAndKey("agent");
         (creator, creatorPk) = makeAddrAndKey("creator");
 
-        usdc = new MockUSDC();
         creators = new CreatorRegistry(platform, attester);
         licences = new LicenseRegistry(platform, creators);
         receipts = new ReceiptAnchor(platform);
-        escrow = new LicenseEscrow(platform, usdc, licences, receipts, treasury, FEE_BPS);
+        _wireSettlement(makeAddr("settlement"));
+    }
+
+    /// @dev The settlement contract is the only writer of renders and receipts.
+    function _wireSettlement(address settlement) internal virtual {
         vm.startPrank(platform);
-        licences.setEscrow(address(escrow));
-        receipts.setEscrow(address(escrow));
-        escrow.setRenderAgent(agent, true);
+        licences.setSettlement(settlement);
+        receipts.setSettlement(settlement);
         vm.stopPrank();
     }
 
@@ -105,29 +98,6 @@ abstract contract Base is Test {
     function _license(address licensee, uint32 renderCap) internal returns (uint256 id) {
         vm.prank(licensee);
         id = licences.request(_request(renderCap), "");
-    }
-
-    function _fund(uint256 id, address licensee, uint256 amount) internal {
-        usdc.mint(licensee, amount);
-        vm.startPrank(licensee);
-        usdc.approve(address(escrow), amount);
-        escrow.deposit(id, amount);
-        vm.stopPrank();
-    }
-
-    function _agentSig(uint256 id, bytes32 assetHash, uint32 renderIndex, uint64 deadline)
-        internal
-        view
-        returns (bytes memory)
-    {
-        return _sign(agentPk, escrow.renderDigest(id, assetHash, renderIndex, deadline));
-    }
-
-    function _render(uint256 id, address licensee, bytes32 assetHash) internal returns (uint32) {
-        uint64 deadline = uint64(block.timestamp + 5 minutes);
-        bytes memory sig = _agentSig(id, assetHash, licences.licence(id).renderCount, deadline);
-        vm.prank(licensee);
-        return escrow.payRender(id, assetHash, agent, deadline, sig);
     }
 
     function _sign(uint256 pk, bytes32 digest) internal pure returns (bytes memory) {

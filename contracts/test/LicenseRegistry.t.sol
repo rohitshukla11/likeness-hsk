@@ -191,16 +191,16 @@ contract LicenseRegistryTest is Base {
         assertEq(uint8(licences.status(c)), uint8(LicenseRegistry.Status.Active));
     }
 
-    function test_recordRender_onlyEscrow() public {
+    function test_recordRender_onlySettlement() public {
         uint256 id = _license(brand, 10);
         vm.prank(brand);
-        vm.expectRevert(LicenseRegistry.NotEscrow.selector);
+        vm.expectRevert(LicenseRegistry.NotSettlement.selector);
         licences.recordRender(id);
     }
 
-    function test_setEscrow_once() public {
+    function test_setSettlement_once() public {
         vm.prank(platform);
-        vm.expectRevert(LicenseRegistry.EscrowAlreadySet.selector);
-        licences.setEscrow(address(1));
+        vm.expectRevert(LicenseRegistry.SettlementAlreadySet.selector);
+        licences.setSettlement(address(1));
     }
 }
