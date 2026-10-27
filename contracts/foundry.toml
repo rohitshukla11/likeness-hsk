@@ -1,0 +1,32 @@
+# Arc mainnet (chain 5042). Build and unit tests run on standard Foundry. The fork suite and
+# deployments use Arc Foundry (arc-forge), which models Arc's native USDC:
+#   https://docs.arc.io/arc/tutorials/install-arc-foundry.md
+# Verification: Blockscout at https://explorer.arc.io (see docs/deploy-arc.md).
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.30"
+optimizer = true
+optimizer_runs = 10_000
+use_literal_content = true
+fs_permissions = [{ access = "write", path = "../deployments" }]
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "forge-std/=lib/forge-std/src/",
+]
+
+[fuzz]
+runs = 1024
+
+[invariant]
+runs = 256
+depth = 64
+fail_on_revert = true
+
+[rpc_endpoints]
+# Circle's public endpoint: https://docs.arc.io/arc/references/rpc-endpoints.md
+arc_mainnet = "${ARC_RPC_URL}"
+
+[lint]
+lint_on_build = false
