@@ -3,7 +3,7 @@ import { CART_MANDATE_KEY } from "../src/a2a/types.js";
 import { sendMessage, userMessage } from "../src/a2a/client.js";
 import { Refused } from "../src/brand-agent/agent.js";
 import { webhookSignatureHeader } from "../src/hsp/webhook.js";
-import { ADVERTISING, PRICE, SOCIAL, startDevnet, type Devnet } from "./helpers/devnet.js";
+import { ADVERTISING, PRICE, SOCIAL, startDevnet, type Devnet } from "../src/dev/devnet.js";
 
 const LICENCE = { category: ADVERTISING, regions: 1, durationSeconds: 7n * 86400n, renderCap: 2, purpose: "spring campaign" };
 

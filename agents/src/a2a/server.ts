@@ -36,28 +36,28 @@ export function serveA2A(handler: A2AHandler): Server {
       if (req.method === "GET" && req.url === "/.well-known/agent-card.json") return sendJson(res, 200, handler.card());
       if (req.method !== "POST" || req.url !== "/a2a") return sendJson(res, 404, { error: "not found" });
 
-      let rpc: JsonRpcRequest;
-      try {
-        rpc = JSON.parse(raw);
-      } catch {
-        return sendJson(res, 200, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } } satisfies JsonRpcResponse);
-      }
-      if (rpc.jsonrpc !== "2.0" || rpc.id === undefined) {
-        return sendJson(res, 200, { jsonrpc: "2.0", id: null, error: { code: -32600, message: "invalid request" } } satisfies JsonRpcResponse);
-      }
-      if (rpc.method !== "message/send") {
-        return sendJson(res, 200, { jsonrpc: "2.0", id: rpc.id, error: { code: -32601, message: "method not found" } } satisfies JsonRpcResponse);
-      }
-      const message = (rpc.params as { message?: Message } | undefined)?.message;
-      if (!message || message.kind !== "message" || !Array.isArray(message.parts)) {
-        return sendJson(res, 200, { jsonrpc: "2.0", id: rpc.id, error: { code: -32602, message: "invalid params" } } satisfies JsonRpcResponse);
-      }
-      const task = await handler.onMessage(message);
-      return sendJson(res, 200, { jsonrpc: "2.0", id: rpc.id, result: task } satisfies JsonRpcResponse);
+      return sendJson(res, 200, await a2aResponse(handler, raw));
     } catch (e) {
       return sendJson(res, 500, { jsonrpc: "2.0", id: null, error: { code: -32603, message: e instanceof Error ? e.message : "internal error" } });
     }
   });
+}
+
+/** JSON-RPC 2.0 `message/send`, framework-agnostic. */
+export async function a2aResponse(handler: Pick<A2AHandler, "onMessage">, raw: string): Promise<JsonRpcResponse> {
+  let rpc: JsonRpcRequest;
+  try {
+    rpc = JSON.parse(raw);
+  } catch {
+    return { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } };
+  }
+  if (rpc.jsonrpc !== "2.0" || rpc.id === undefined) return { jsonrpc: "2.0", id: null, error: { code: -32600, message: "invalid request" } };
+  if (rpc.method !== "message/send") return { jsonrpc: "2.0", id: rpc.id, error: { code: -32601, message: "method not found" } };
+  const message = (rpc.params as { message?: Message } | undefined)?.message;
+  if (!message || message.kind !== "message" || !Array.isArray(message.parts)) {
+    return { jsonrpc: "2.0", id: rpc.id, error: { code: -32602, message: "invalid params" } };
+  }
+  return { jsonrpc: "2.0", id: rpc.id, result: await handler.onMessage(message) };
 }
 
 export function listen(server: Server, port = 0): Promise<string> {

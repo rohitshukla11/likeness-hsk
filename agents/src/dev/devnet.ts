@@ -18,21 +18,21 @@ import {
   type PublicClient,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { listen, serveA2A } from "../../src/a2a/server.js";
-import { BrandAgent, type CreatorConnection } from "../../src/brand-agent/agent.js";
-import type { BrandPolicy } from "../../src/brand-agent/policy.js";
-import { chainOf, creatorRegistryAbi, hspSettlementAbi, licenseRegistryAbi, Likeness, receiptAnchorAbi, type Deployment } from "../../src/chain/contracts.js";
-import { CreatorAgent } from "../../src/creator-agent/agent.js";
-import { HspClient } from "../../src/hsp/client.js";
-import { HspGatewayEmulator } from "../../src/hsp/emulator.js";
-import { MessageLog } from "../../src/log.js";
-import { RenderAgent } from "../../src/render/renderAgent.js";
+import { listen, serveA2A } from "../a2a/server.js";
+import { BrandAgent, type CreatorConnection } from "../brand-agent/agent.js";
+import type { BrandPolicy } from "../brand-agent/policy.js";
+import { chainOf, creatorRegistryAbi, hspSettlementAbi, licenseRegistryAbi, Likeness, receiptAnchorAbi, type Deployment } from "../chain/contracts.js";
+import { CreatorAgent } from "../creator-agent/agent.js";
+import { HspClient } from "../hsp/client.js";
+import { HspGatewayEmulator } from "../hsp/emulator.js";
+import { MessageLog } from "../log.js";
+import { RenderAgent } from "../render/renderAgent.js";
 
 export const ADVERTISING = 1 << 8;
 export const SOCIAL = 1 << 9;
 export const PRICE = 50_000n; // 0.05 USDC.e
 
-const OUT = fileURLToPath(new URL("../../../contracts/out/", import.meta.url));
+const OUT = fileURLToPath(new URL("../../../contracts/out/", import.meta.url)); // agents/src/dev → contracts/out
 const artifact = (name: string) => {
   const j = JSON.parse(readFileSync(`${OUT}${name}.sol/${name}.json`, "utf8"));
   return { abi: j.abi as Abi, bytecode: j.bytecode.object as Hex };
@@ -61,11 +61,21 @@ export interface Devnet {
   payout: Address;
   token: Address;
   balanceOf(who: Address): Promise<bigint>;
+  connect(): Promise<CreatorConnection>;
   revoke(licenceId: bigint): Promise<void>;
   stop(): void;
 }
 
-export async function startDevnet(opts: { rail?: "eip3009" | "permit2"; nonceMode?: "payer" | "gateway"; policy?: Partial<BrandPolicy> } = {}): Promise<Devnet> {
+export interface DevnetOptions {
+  rail?: "eip3009" | "permit2";
+  nonceMode?: "payer" | "gateway";
+  policy?: Partial<BrandPolicy>;
+  /** Host the creator agent elsewhere (the app server) at this URL; the devnet then serves nothing. */
+  publicUrl?: string;
+}
+
+/** A local chain with the real contracts, a mock stablecoin, the HSP Gateway emulator and the agents. */
+export async function startDevnet(opts: DevnetOptions = {}): Promise<Devnet> {
   const rail = opts.rail ?? "eip3009";
   const port = await freePort();
   const rpcUrl = `http://127.0.0.1:${port}`;
@@ -177,8 +187,8 @@ export async function startDevnet(opts: { rail?: "eip3009" | "permit2"; nonceMod
   const gatewayUrl = await emulator.start();
   const { privateKey: merchantKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "secp256k1" });
   const creds = { appKey: `ak_${randomBytes(6).toString("hex")}`, appSecret: randomBytes(32).toString("hex") };
-  const agentPort = await freePort();
-  const creatorAgentUrl = `http://127.0.0.1:${agentPort}`;
+  const agentPort = opts.publicUrl ? 0 : await freePort();
+  const creatorAgentUrl = opts.publicUrl ?? `http://127.0.0.1:${agentPort}`;
   emulator.registerMerchant({ ...creds, merchantPublicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(), webhookUrl: `${creatorAgentUrl}/hsp/webhook` });
 
   const creatorAgent = new CreatorAgent({
@@ -192,8 +202,8 @@ export async function startDevnet(opts: { rail?: "eip3009" | "permit2"; nonceMod
     publicUrl: creatorAgentUrl,
     log,
   });
-  const server = serveA2A(creatorAgent);
-  await listen(server, agentPort);
+  const server = opts.publicUrl ? undefined : serveA2A(creatorAgent);
+  if (server) await listen(server, agentPort);
 
   const brand = new BrandAgent({
     account: accounts.brand,
@@ -203,7 +213,8 @@ export async function startDevnet(opts: { rail?: "eip3009" | "permit2"; nonceMod
     log,
     permit2Spender: accounts.executor.address,
   });
-  const conn = await brand.connect(creatorAgentUrl);
+  // When the app hosts the agent, it connects once it is listening (Devnet.connect).
+  const conn = server ? await brand.connect(creatorAgentUrl) : (undefined as unknown as CreatorConnection);
   const render = new RenderAgent(accounts.renderAgent, chain, log);
 
   return {
@@ -215,13 +226,14 @@ export async function startDevnet(opts: { rail?: "eip3009" | "permit2"; nonceMod
     brand,
     render,
     conn,
+    connect: async () => brand.connect(creatorAgentUrl),
     accounts,
     payout,
     token,
     balanceOf: (who) => pub.readContract({ address: token, abi: parseAbi(["function balanceOf(address) view returns (uint256)"]), functionName: "balanceOf", args: [who] }),
     revoke: (id) => send(accounts.creator, licences, licenseRegistryAbi as Abi, "revoke", [id]),
     stop: () => {
-      server.close();
+      server?.close();
       emulator.stop();
       anvil.kill();
     },

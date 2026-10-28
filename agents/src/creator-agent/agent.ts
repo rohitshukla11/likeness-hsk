@@ -13,7 +13,7 @@ import {
 import { AP2_EXTENSION, A2A_PROTOCOL_VERSION, CART_MANDATE_KEY, dataOf, type AgentCard, type Message, type Task } from "../a2a/types.js";
 import { sendJson, type A2AHandler } from "../a2a/server.js";
 import { hspSettlementAbi, type Likeness } from "../chain/contracts.js";
-import { buildCartContents, signCart } from "../hsp/cart.js";
+import { buildCartContents, signCart, usdValue } from "../hsp/cart.js";
 import type { HspClient } from "../hsp/client.js";
 import { PERMIT2 } from "../hsp/payment.js";
 import { verifyWebhook, type PaymentWebhook } from "../hsp/webhook.js";
@@ -215,18 +215,26 @@ export class CreatorAgent implements A2AHandler {
 
   async route(req: IncomingMessage, res: ServerResponse, rawBody: string): Promise<boolean> {
     if (req.method !== "POST" || req.url !== "/hsp/webhook") return false;
+    const r = this.handleWebhook(rawBody, header(req, "x-signature"));
+    sendJson(res, r.status, r.body);
+    return true;
+  }
+
+  /**
+   * Verifies an HSP webhook and starts settling it. Answers at once (HSP wants 2xx within 10 s); the
+   * on-chain record happens after. Framework-agnostic: any HTTP server can call it.
+   */
+  handleWebhook(rawBody: string, signature: string | undefined): { status: number; body: unknown } {
     let hook: PaymentWebhook;
     try {
-      hook = verifyWebhook(this.c.webhookSecret, rawBody, header(req, "x-signature"));
+      hook = verifyWebhook(this.c.webhookSecret, rawBody, signature);
     } catch (e) {
       this.c.log.add("creator-agent", "refused", `webhook rejected: ${(e as Error).message}`);
-      sendJson(res, 401, { error: "invalid signature" });
-      return true;
+      return { status: 401, body: { error: "invalid signature" } };
     }
     this.c.log.add("hsp-gateway", "hsp.webhook", `${hook.status} for ${hook.payment_request_id}`, hook);
-    sendJson(res, 200, { ok: true }); // answer within HSP's 10 s; settle after
     void this.onPaymentUpdate(hook).catch((e) => this.c.log.add("creator-agent", "error", `settling ${hook.payment_request_id} failed: ${(e as Error).message}`));
-    return true;
+    return { status: 200, body: { ok: true } };
   }
 
   /** Records the payment on chain once it reaches `recordAt`. Idempotent per cart. */
@@ -273,7 +281,7 @@ export class CreatorAgent implements A2AHandler {
     }
     const nonce = await this.executedNonce(l.licensee, licenceId, renderIndex, nonces, txHash);
     const bound = nonce === (await ch.paymentNonce(licenceId, renderIndex));
-    this.c.log.add("creator-agent", "info", `verified ${received} to the payout in ${txHash}; nonce ${bound ? "bound to this render" : "chosen by the HSP Gateway"}`, {
+    this.c.log.add("creator-agent", "info", `verified ${usdValue(received)} ${ch.d.tokenSymbol} to the payout in ${txHash}; nonce ${bound ? "bound to this render" : "chosen by the HSP Gateway"}`, {
       licenceId,
       renderIndex,
       nonce,
