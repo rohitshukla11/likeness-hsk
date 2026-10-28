@@ -7,6 +7,7 @@ import { CreatorAgent } from "../creator-agent/agent.js";
 import { startDevnet } from "../dev/devnet.js";
 import { HspClient } from "../hsp/client.js";
 import { loadHspConfig } from "../hsp/config.js";
+import { deploymentsDir, rpcFor } from "../chain/networks.js";
 import { HspGatewayEmulator } from "../hsp/emulator.js";
 import { keychainPassword, loadAccount } from "../keys.js";
 import { MessageLog } from "../log.js";
@@ -90,7 +91,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     };
   }
 
-  const dep = JSON.parse(readFileSync(`${opts.root}deployments/${opts.mode}.json`, "utf8"));
+  const dep = JSON.parse(readFileSync(`${deploymentsDir(opts.root)}/${opts.mode}.json`, "utf8"));
   const d: Deployment = {
     chainId: dep.chainId,
     rpcUrl: dep.rpcUrl,
@@ -108,7 +109,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
   };
   const pub = createPublicClient({ chain: chainOf(d), transport: http(d.rpcUrl), pollingInterval: 1000 }) as PublicClient;
   const chain = new Likeness(d, pub);
-  const log = new MessageLog(`${opts.root}deployments/${opts.mode}-app.jsonl`);
+  const log = new MessageLog(`${deploymentsDir(opts.root)}/${opts.mode}-app.jsonl`);
   const pw = keychainPassword();
   const key = (name: string) => loadAccount(`${opts.root}.secrets/keystores/${name}`, pw);
   const [creator, creatorAgentKey, brandKey, renderKey] = ["creator", "creator-agent", "brand", "render-agent"].map(key) as [LocalAccount, LocalAccount, LocalAccount, LocalAccount];
@@ -128,7 +129,11 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     permit2Spender = hsp.permit2Spender;
     gateway = "hsp";
   } else {
-    if (opts.mode === "mainnet") throw new Error("mainnet needs real HSP credentials (.secrets/hsp/credentials.json); the emulator is never used on mainnet");
+    // The emulator never stands in for HSP on mainnet; only a rehearsal on a local fork may use it.
+    if (opts.mode === "mainnet" && !process.env.LIKENESS_RPC_URL) {
+      throw new Error("mainnet needs real HSP credentials (.secrets/hsp/credentials.json); the emulator is never used on mainnet");
+    }
+    if (process.env.LIKENESS_RPC_URL) rpcFor("mainnet"); // throws unless it is a local fork
     const executor = key("deployer");
     emulator = new HspGatewayEmulator({ chain: chain.chain, rpcUrl: d.rpcUrl, publicClient: pub, executor, nonceMode: "payer" });
     emulator.permit2 = d.permit2;

@@ -22,3 +22,20 @@ export const NETWORKS = {
 
 export const PERMIT2_ADDRESS: Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 export type NetworkName = keyof typeof NETWORKS;
+
+/**
+ * Rehearsal of the mainnet runbook against a local fork (anvil --fork-url https://mainnet.hsk.xyz):
+ * LIKENESS_RPC_URL must be a localhost URL, and deployments go to LIKENESS_DEPLOYMENTS, so a rehearsal
+ * can never reach the real network or write the real deployments/mainnet.json.
+ */
+export function rpcFor(network: NetworkName): string {
+  const o = process.env.LIKENESS_RPC_URL;
+  if (!o) return NETWORKS[network].rpcUrl;
+  if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+\/?$/.test(o)) throw new Error("LIKENESS_RPC_URL may only point at a local fork");
+  if (!process.env.LIKENESS_DEPLOYMENTS) throw new Error("a rehearsal needs LIKENESS_DEPLOYMENTS (a separate folder)");
+  return o;
+}
+
+export function deploymentsDir(root: string): string {
+  return process.env.LIKENESS_DEPLOYMENTS ?? `${root}deployments`;
+}

@@ -8,7 +8,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createPublicClient, createWalletClient, encodeDeployData, formatEther, http, type Abi, type Address, type Hex } from "viem";
 import { chainOf, type Deployment } from "../src/chain/contracts.js";
-import { NETWORKS, PERMIT2_ADDRESS, type NetworkName } from "../src/chain/networks.js";
+import { deploymentsDir, NETWORKS, PERMIT2_ADDRESS, rpcFor, type NetworkName } from "../src/chain/networks.js";
 import { keychainPassword, loadAccount } from "../src/keys.js";
 
 const args = process.argv.slice(2);
@@ -18,7 +18,7 @@ if (!(network in NETWORKS)) throw new Error("--network testnet|mainnet");
 if (network === "mainnet" && broadcast && process.env.LIKENESS_MAINNET_DEPLOY !== "yes") {
   throw new Error("mainnet broadcast refused: needs LIKENESS_MAINNET_DEPLOY=yes (only on Rohit's \"deploy\")");
 }
-const net = NETWORKS[network];
+const net = { ...NETWORKS[network], rpcUrl: rpcFor(network) };
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const artifact = (name: string, dir = `${name}.sol`) => {
   const j = JSON.parse(readFileSync(`${root}contracts/out/${dir}/${name}.json`, "utf8"));
@@ -121,6 +121,6 @@ const out = {
   settlement: settlement.address,
   txs,
 };
-mkdirSync(`${root}deployments`, { recursive: true });
-writeFileSync(`${root}deployments/${network}.json`, `${JSON.stringify(out, null, 2)}\n`);
-console.log(`wrote deployments/${network}.json`);
+mkdirSync(deploymentsDir(root), { recursive: true });
+writeFileSync(`${deploymentsDir(root)}/${network}.json`, `${JSON.stringify(out, null, 2)}\n`);
+console.log(`wrote ${deploymentsDir(root)}/${network}.json`);

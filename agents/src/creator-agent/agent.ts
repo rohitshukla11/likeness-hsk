@@ -237,6 +237,23 @@ export class CreatorAgent implements A2AHandler {
     return { status: 200, body: { ok: true } };
   }
 
+  /**
+   * Polling fallback for when the webhook can't reach this agent (no public HTTPS URL): asks the
+   * Gateway for the payment's status until it can be recorded or fails. Idempotent with the webhook.
+   */
+  async pollPayment(paymentRequestId: string, { intervalMs = 3000, timeoutMs = 300_000 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const p = await this.c.hsp.getPayment({ payment_request_id: paymentRequestId });
+      if (p.status === "payment-failed" || STATES.indexOf(p.status as (typeof STATES)[number]) >= STATES.indexOf(this.c.recordAt ?? "payment-included")) {
+        this.c.log.add("hsp-gateway", "hsp.response", `polled: ${p.status} for ${paymentRequestId}`, p);
+        return this.onPaymentUpdate({ ...p, tx_signature: p.tx_signature, status: p.status as PaymentWebhook["status"] });
+      }
+      if (Date.now() > deadline) throw new Error(`payment ${paymentRequestId} still ${p.status}`);
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+
   /** Records the payment on chain once it reaches `recordAt`. Idempotent per cart. */
   async onPaymentUpdate(p: Pick<PaymentWebhook, "cart_mandate_id" | "payment_request_id" | "status" | "tx_signature" | "status_reason">) {
     if (p.status === "payment-failed") {

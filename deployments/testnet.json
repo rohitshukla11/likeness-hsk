@@ -27,5 +27,6 @@
     "setSettlement(L)": "0x22d398fd41cab433b7022b7e6cc9092317169ac632ac938b45543718e2494d9b",
     "setSettlement(R)": "0xcb111f2103dd7356d379e37d55dd0ac12237d930694c65b2bd439896124efe0e",
     "setRenderAgent": "0x286bfc054d58ce12256201c220eceaa74498460cf4076da0a02246ab46b00da6"
-  }
+  },
+  "safe": "0x760Dff71d6345b7dd0dA674b034495f1A783c0c7"
 }
