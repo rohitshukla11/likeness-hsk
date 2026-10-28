@@ -2,8 +2,6 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createPublicClient,
@@ -27,6 +25,7 @@ import { HspClient } from "../hsp/client.js";
 import { HspGatewayEmulator } from "../hsp/emulator.js";
 import { MessageLog } from "../log.js";
 import { RenderAgent } from "../render/renderAgent.js";
+import { foundryBin } from "./foundry.js";
 
 export const ADVERTISING = 1 << 8;
 export const SOCIAL = 1 << 9;
@@ -79,7 +78,7 @@ export async function startDevnet(opts: DevnetOptions = {}): Promise<Devnet> {
   const rail = opts.rail ?? "eip3009";
   const port = await freePort();
   const rpcUrl = `http://127.0.0.1:${port}`;
-  const anvil: ChildProcess = spawn(join(homedir(), ".foundry/bin/anvil"), ["--port", String(port), "--chain-id", "31337", "--silent"], { stdio: "ignore" });
+  const anvil: ChildProcess = spawn(foundryBin("anvil"), ["--port", String(port), "--chain-id", "31337", "--silent"], { stdio: "ignore" });
   const chainId = 31337;
   const tmpChain = chainOf({ chainId, rpcUrl } as Deployment);
   // Local anvil mines instantly; poll receipts every 50 ms instead of viem's default 4 s.

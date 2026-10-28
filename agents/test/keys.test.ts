@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { privateKeyToAccount } from "viem/accounts";
 import { afterAll, describe, expect, it } from "vitest";
 import { decryptKeystore } from "../src/keys.js";
+import { foundryBin } from "../src/dev/foundry.js";
 
-const cast = join(homedir(), ".foundry/bin/cast");
+const cast = foundryBin("cast");
 
 describe("keystores (cast wallet new)", () => {
   const dir = mkdtempSync(join(tmpdir(), "likeness-hsk-ks-"));

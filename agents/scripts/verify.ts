@@ -8,16 +8,17 @@
 // of its comments (each contract is verified with its own file in full).
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { foundryBin } from "../src/dev/foundry.js";
 
 const args = process.argv.slice(2);
 const network = args[args.indexOf("--network") + 1];
 if (network !== "testnet" && network !== "mainnet") throw new Error("--network testnet|mainnet");
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const dep = JSON.parse(readFileSync(`${root}deployments/${network}.json`, "utf8"));
-const forge = join(homedir(), ".foundry/bin/forge");
+const forge = foundryBin("forge");
 const COMPILER = "v0.8.30+commit.73712a01";
 const contracts: [string, string, string][] = [
   ["CreatorRegistry", "src/CreatorRegistry.sol", dep.creators],
