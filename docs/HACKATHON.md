@@ -24,12 +24,29 @@ The Likeness licensing contracts come from **[likeness-arc](https://github.com/r
 
 ## Built for this hackathon
 
+Every commit since the copy, from `git log` (UTC):
+
 | When (UTC) | Commit | What |
 |---|---|---|
-| 27 Oct 16:11 | `5510455` | New repository: licence, README, ignore rules for secrets and keystores |
-| 27 Oct 16:13 | `95f0690` | Port to HSK Chain: `evm_version` cancun (checked against mainnet), HSK RPC endpoints, settlement role |
-| 27 Oct 16:26 | `3942151` | **`HspSettlement`**, the HSP payment binding, with 34 new tests and an HSK mainnet fork suite |
-| 27 Oct 17:14 | (this commit) | `recordPayment` takes the nonce that actually executed, so payments still work if the HSP Gateway picks the nonce. Each nonce counts once, and every payment records whether its nonce was bound to the render. 8 more tests |
+| 27 Oct 16:11 | `5510455` | Scaffold: MIT licence, README, gitignore (secrets, keystores, build output, renders) |
+| 27 Oct 16:13 | `95f0690` | Port to HSK Chain: settlement replaces escrow; Arc-only code removed |
+| 27 Oct 16:26 | `3942151` | HspSettlement: HSP pays per render; a render is recorded only after its payment executed on chain |
+| 27 Oct 16:36 | `7edf788` | docs/HACKATHON.md: what was reused from likeness-arc (commit ea40c8e, copied unchanged in 047e3b5) and what was built for HSK Chain Horizon, with… |
+| 27 Oct 17:13 | `904e6c3` | HspSettlement records the nonce that executed: works whether the payment agent or the HSP Gateway picks it |
+| 27 Oct 17:33 | `8d6f345` | MockPermit2 uses Permit2's real EIP-712 domain (name, chainId, verifyingContract; no version). The end-to-end test signing off-chain against the… |
+| 27 Oct 17:33 | `4206116` | HSP client: HMAC request signing, ES256K merchant JWT over the canonical cart hash, AP2 Cart and Payment Mandates, EIP-3009 and Permit2… |
+| 27 Oct 17:33 | `192b58b` | A2A creator and brand agents, render agent, message log, local HSP Gateway emulator, end-to-end tests |
+| 27 Oct 17:33 | `e133be7` | README and docs/HACKATHON.md: the agents and the HSP client, how they map to the track spec, what HashKey has not yet confirmed, the emulator |
+| 28 Oct 10:09 | `ec5664d` | Deploy and testnet scripts on the USDT / Permit2 rail; TestUSDT for chain 133 |
+| 28 Oct 10:16 | `98e3f68` | README and docs/HACKATHON.md: the demo app, the deployment tooling and the download fix |
+| 28 Oct 10:16 | `e36d689` | Agents: framework-agnostic A2A JSON-RPC and HSP webhook handling; the devnet (moved to src/dev in 98e3f68) can leave hosting to the app; e2e tests… |
+| 28 Oct 10:16 | `98e9bd4` | Demo app: brand console with the live A2A/mandate/HSP log, creator page with revoke, Verify; render downloads need the licensee's signature |
+| 28 Oct 10:29 | `081d7f2` | Robust to load-balanced RPCs: nonces counted locally, reads wait for the written block, the creator agent waits for the payment's block and… |
+| 28 Oct 10:29 | `776c4e6` | scripts: fund (gas from the deployer, dry run by default, mainnet only with LIKENESS_MAINNET_FUND=yes) and recover (records a missed HSP payment… |
+| 28 Oct 10:29 | `a222024` | HSK testnet (133): contracts deployed on the USDT/Permit2 rail with TestUSDT; the agents end to end (licence, Permit2 payment, recordPayment with… |
+| 28 Oct 10:38 | `e78cf89` | App polish: step-by-step A2A → AP2 → HSP → chain view, payments, fuller Verify, gateway banner, optional Gemini |
+| 28 Oct 10:40 | `f7b1435` | HSP readiness: the real-Gateway path behind one config file, a setup checker, and the checklist |
+| 28 Oct 11:02 | `b3b17af` | Mainnet runbook, rehearsed on a mainnet fork; Safe ownership and Blockscout verification live on testnet |
 
 **`HspSettlement` (new):**
 - A render is recorded only after the licensee's stablecoin authorization has executed on chain.
@@ -117,6 +134,21 @@ nothing.
   are counted locally.
 - **The recovery:** `pnpm run recover` records a missed payment with the same checks. It recorded
   licence 1's payment ([tx](https://testnet-explorer.hskchain.net/tx/0x041b750681aa68a8d31514246876fe27811b818b1ea41efc015af728c0b6e68e)).
+
+## 28 October: the testnet app, HSP readiness, the mainnet runbook
+
+- **App polish:**
+  - testnet by default;
+  - each paid render as ten steps with explorer links;
+  - payments made and received; fuller Verify;
+  - an honest gateway banner;
+  - optional Gemini renders.
+- **HSP readiness:** the real-Gateway path behind `.secrets/hsp/credentials.json`, `pnpm run
+  hsp:check`, and [HSP_SETUP.md](HSP_SETUP.md).
+- **Safe:** a Safe{Wallet} owns the testnet contracts.
+- **Verification:** all five testnet contracts are source-verified on Blockscout.
+- **Mainnet runbook:** [MAINNET_RUNBOOK.md](MAINNET_RUNBOOK.md), rehearsed in full on a local fork
+  of HSK mainnet with real USDT, Permit2 and HSKSwap state.
 
 Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive) and the
 mainnet deployment.
