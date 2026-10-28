@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "deploy": "tsx scripts/deploy.ts",
-    "testnet": "tsx scripts/run-testnet.ts"
+    "testnet": "tsx scripts/run-testnet.ts",
+    "app": "tsx src/app/server.ts"
   },
   "dependencies": {
     "viem": "2.57.2"

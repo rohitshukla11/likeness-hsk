@@ -1,0 +1,72 @@
+:root {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --ink: #17181a;
+  --muted: #5f6368;
+  --line: #e3e3df;
+  --accent: #3b5bdb;
+  --ok: #2b8a3e;
+  --warn: #c92a2a;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111214;
+    --panel: #1a1b1e;
+    --ink: #ececec;
+    --muted: #a0a4ab;
+    --line: #2c2e33;
+    --accent: #748ffc;
+    --ok: #69db7c;
+    --warn: #ff8787;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header .brand { font-weight: 700; margin-right: auto; }
+header a { color: var(--muted); text-decoration: none; }
+header a.on, header a:hover { color: var(--ink); }
+main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+p.lede { color: var(--muted); margin: 0 0 20px; max-width: 760px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.panel + .panel { margin-top: 16px; }
+.grid > .panel + .panel { margin-top: 0; }
+dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+.mono { font-family: var(--mono); font-size: 13px; }
+button { font: inherit; border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
+button.ghost { background: transparent; color: var(--accent); }
+button.danger { border-color: var(--warn); background: transparent; color: var(--warn); }
+button:disabled { opacity: 0.5; cursor: progress; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; border: 1px solid var(--line); }
+.pill.Active, .pill.Licensed { color: var(--ok); border-color: var(--ok); }
+.pill.Revoked, .pill.Expired, .pill.Exhausted { color: var(--warn); border-color: var(--warn); }
+.note { color: var(--muted); font-size: 13px; }
+.result { margin-top: 12px; padding: 12px; border-radius: 8px; border: 1px dashed var(--line); overflow-wrap: anywhere; }
+.err { color: var(--warn); }
+a { color: var(--accent); }
+.log { max-height: 70vh; overflow: auto; }
+.ev { border-left: 3px solid var(--line); padding: 4px 10px; margin: 0 0 8px; }
+.ev .who { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.ev.brand-agent { border-color: #3b5bdb; } .ev.brand-agent .who { color: #3b5bdb; }
+.ev.creator-agent { border-color: #e8590c; } .ev.creator-agent .who { color: #e8590c; }
+.ev.hsp-gateway { border-color: #0c8599; } .ev.hsp-gateway .who { color: #0c8599; }
+.ev.chain { border-color: #2b8a3e; } .ev.chain .who { color: #2b8a3e; }
+.ev.render-agent { border-color: #862e9c; } .ev.render-agent .who { color: #862e9c; }
+.ev.refused .sum, .ev.error .sum { color: var(--warn); }
+.ev details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.ev pre { margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: 6px; overflow: auto; max-height: 280px; font: 12px/1.4 var(--mono); }
+.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 28px; text-align: center; color: var(--muted); }
+.drop.over { border-color: var(--accent); color: var(--ink); }
+.big { font-size: 26px; font-weight: 700; }

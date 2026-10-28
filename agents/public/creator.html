@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Creator</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Creator</h1>
+      <p class="lede">
+        Ana Reyes is a synthetic demo creator (a generated face, not a real person). The creator's terms live on HSK Chain; the
+        creator's agent quotes each render from them and refuses once a licence is revoked, expired or used up.
+      </p>
+      <div class="grid">
+        <div class="panel">
+          <h2>Terms on chain</h2>
+          <dl id="terms"></dl>
+          <p class="note">Agent card: <a href="/.well-known/agent-card.json">/.well-known/agent-card.json</a></p>
+        </div>
+        <div class="panel">
+          <h2>Licences</h2>
+          <table>
+            <thead><tr><th>#</th><th>licensee</th><th>status</th><th>renders</th><th></th></tr></thead>
+            <tbody id="licences"></tbody>
+          </table>
+          <div id="result"></div>
+        </div>
+      </div>
+    </main>
+    <script type="module">
+      import { api, header, esc, txLink, addrLink } from "/static/app.js";
+      header("/creator");
+      const s = await api("/api/state");
+      const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+      const cats = (bits) => ["advertising", "social", "editorial", "entertainment", "product"].filter((_, i) => bits & (1 << (8 + i))).join(", ");
+      document.querySelector("#terms").innerHTML =
+        row("creator", addrLink(s, s.creator)) +
+        row("paid to", addrLink(s, s.payout)) +
+        row("price", `${esc(s.terms.price)} ${esc(s.token)} per render`) +
+        row("allowed uses", esc(cats(s.terms.categories))) +
+        row("render cap", `${s.terms.maxRenders} per licence`) +
+        row("approval", s.terms.autoApprove ? "automatic within these terms" : "each request");
+      const result = document.querySelector("#result");
+      async function show() {
+        const list = await api("/api/licences?who=creator");
+        document.querySelector("#licences").innerHTML = list.length
+          ? list
+              .map(
+                (l) =>
+                  `<tr><td>${esc(l.id)}</td><td>${addrLink(s, l.licensee)}</td><td><span class="pill ${esc(l.status)}">${esc(l.status)}</span></td><td>${l.renderCount} / ${l.renderCap}</td><td><button class="danger" data-revoke="${esc(l.id)}" ${l.status === "Active" && s.operator ? "" : "disabled"}>Revoke</button></td></tr>`,
+              )
+              .join("")
+          : `<tr><td colspan="5" class="note">No licences yet.</td></tr>`;
+      }
+      document.querySelector("#licences").addEventListener("click", async (ev) => {
+        const id = ev.target?.dataset?.revoke;
+        if (!id) return;
+        ev.target.disabled = true;
+        try {
+          const r = await api("/api/creator/revoke", { licenceId: id });
+          result.innerHTML = `<div class="result">Licence ${esc(id)} revoked ${txLink(s, r.tx)}. The next payment for it is refused before any money moves.</div>`;
+        } catch (e) {
+          result.innerHTML = `<div class="result err">${esc(e.message)}</div>`;
+        }
+        await show();
+      });
+      await show();
+    </script>
+  </body>
+</html>

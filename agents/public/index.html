@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Likeness on HSK Chain</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Agents that pay for consent</h1>
+      <p class="lede">
+        A brand's payment agent licenses a creator's likeness from the creator's own agent (A2A), gets the payment conditions as
+        an AP2 Cart Mandate, signs a Payment Mandate with the brand wallet, and the HSP Gateway executes the stablecoin payment on
+        HSK Chain. A render is recorded only after its payment executed on chain, and a revoked licence stops the next payment.
+      </p>
+      <div class="grid">
+        <div class="panel">
+          <h2>This deployment</h2>
+          <dl id="state"><dt>loading</dt><dd>…</dd></dl>
+        </div>
+        <div class="panel">
+          <h2>Try it</h2>
+          <ol>
+            <li><a href="/brand">Brand console</a>: take a licence, pay for a render, watch every A2A message, mandate and HSP call.</li>
+            <li><a href="/creator">Creator</a>: the creator's terms and licences; revoke one and watch the next payment refused.</li>
+            <li><a href="/verify">Verify</a>: drop any file to see whether it was licensed; only the licensee can download a render.</li>
+            <li><a href="/.well-known/agent-card.json">The creator agent's A2A card</a></li>
+          </ol>
+        </div>
+      </div>
+    </main>
+    <script type="module">
+      import { api, header, esc, addrLink } from "/static/app.js";
+      header("/");
+      const s = await api("/api/state");
+      const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+      document.querySelector("#state").innerHTML =
+        row("network", `${esc(s.mode)} (chain ${s.chainId})`) +
+        row("HSP Gateway", s.gateway === "hsp" ? "HashKey HSP" : "local emulator (not HashKey's service)") +
+        row("payment rail", `${esc(s.token)} via ${s.rail === "permit2" ? "Permit2" : "EIP-3009"}`) +
+        row("price per render", `${esc(s.terms.price)} ${esc(s.token)}`) +
+        row("settlement", addrLink(s, s.contracts.settlement)) +
+        row("licences", addrLink(s, s.contracts.licences)) +
+        row("receipts", addrLink(s, s.contracts.receipts));
+    </script>
+  </body>
+</html>

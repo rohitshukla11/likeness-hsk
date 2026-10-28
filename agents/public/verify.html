@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Verify</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Verify</h1>
+      <p class="lede">Drop a file. Its sha256 is computed in your browser and looked up on HSK Chain: was it rendered under a paid licence, and is that licence still in force?</p>
+      <div class="grid">
+        <div class="panel">
+          <label class="drop" id="drop">Drop a file here, or click to choose<input type="file" id="file" hidden /></label>
+          <p class="note">Or paste a sha256: <input id="hash" class="mono" style="width: 100%" placeholder="0x…" /></p>
+        </div>
+        <div class="panel">
+          <h2>Verdict</h2>
+          <div id="out" class="note">No file yet.</div>
+        </div>
+      </div>
+    </main>
+    <script type="module">
+      import { api, header, esc, txLink, addrLink, sha256Hex, saveBlob } from "/static/app.js";
+      header("/verify");
+      const s = await api("/api/state");
+      const out = document.querySelector("#out");
+      async function check(hash) {
+        out.innerHTML = "Checking…";
+        try {
+          const v = await api(`/api/verify?hash=${hash}`);
+          if (v.verdict === "Unknown") {
+            out.innerHTML = `<div class="big">Unknown</div><p>${esc(v.reason)}</p>`;
+            return;
+          }
+          out.innerHTML = `<div class="big"><span class="pill ${esc(v.verdict)}">${esc(v.verdict)}</span></div>
+            <dl style="margin-top:10px">
+              <dt>licence</dt><dd>#${esc(v.licenceId)} (${esc(v.licenceStatus)}), render ${v.renderIndex}</dd>
+              <dt>creator</dt><dd>${addrLink(s, v.creator)}</dd>
+              <dt>licensee</dt><dd>${addrLink(s, v.licensee)}</dd>
+              <dt>paid</dt><dd>${esc(v.paid)} ${esc(s.token)} through HSP ${txLink(s, v.hspTxHash)}</dd>
+              <dt>anchored</dt><dd>${new Date(v.anchoredAt * 1000).toLocaleString()}</dd>
+            </dl>
+            <p><button class="ghost" id="dl">Download as the licensee (wallet signature)</button></p>
+            <p class="note">Only the licensee's wallet can download a licensed render: the server checks the signature against the licence on chain.</p>`;
+          document.querySelector("#dl").onclick = () => download(hash);
+        } catch (e) {
+          out.innerHTML = `<span class="err">${esc(e.message)}</span>`;
+        }
+      }
+      async function download(hash) {
+        if (!window.ethereum) return alert("Open this page in a browser with a wallet (the licensee's) to download.");
+        const [account] = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const { issuedAt, message } = await api(`/api/renders/${hash}`);
+        const hex = `0x${[...new TextEncoder().encode(message)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+        const signature = await window.ethereum.request({ method: "personal_sign", params: [hex, account] });
+        const res = await fetch(`/api/renders/${hash}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ issuedAt, signature }) });
+        if (!res.ok) return alert((await res.json()).error);
+        saveBlob(await res.blob(), `likeness-render-${hash.slice(2, 10)}`);
+      }
+      const drop = document.querySelector("#drop");
+      const file = document.querySelector("#file");
+      file.onchange = async () => file.files[0] && check(await sha256Hex(file.files[0]));
+      drop.addEventListener("dragover", (e) => (e.preventDefault(), drop.classList.add("over")));
+      drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+      drop.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        drop.classList.remove("over");
+        if (e.dataTransfer.files[0]) check(await sha256Hex(e.dataTransfer.files[0]));
+      });
+      document.querySelector("#hash").addEventListener("change", (e) => /^0x[0-9a-fA-F]{64}$/.test(e.target.value.trim()) && check(e.target.value.trim()));
+    </script>
+  </body>
+</html>
