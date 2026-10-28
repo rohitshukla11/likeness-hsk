@@ -50,13 +50,16 @@ export class MessageLog {
       for (const line of readFileSync(file, "utf8").split("\n")) {
         if (!line.trim()) continue;
         try {
-          const e = JSON.parse(line) as LogEvent;
-          this.events.push(e);
-          this.seq = Math.max(this.seq, e.seq);
+          this.events.push(JSON.parse(line) as LogEvent);
         } catch {
           /* a partial line from a crash */
         }
       }
+      // Several processes (the app, a run script) may append to one file, each counting on its own:
+      // order by time and renumber.
+      this.events.sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : x.seq - y.seq));
+      this.events.forEach((e, i) => (e.seq = i + 1));
+      this.seq = this.events.length;
     }
   }
 

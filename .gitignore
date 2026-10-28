@@ -30,3 +30,6 @@ renders/
 # local run logs (public data, regenerated each run)
 deployments/*.jsonl
 deployments/rehearsal/
+
+# submission kit (local: BUIDL text, video script, screenshots)
+docs/submission/

@@ -23,7 +23,7 @@ const operator = (process.env.LIKENESS_OPERATOR ?? (mode === "mainnet" ? "0" : "
 const publicUrl = process.env.PUBLIC_URL ?? `http://127.0.0.1:${port}`;
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
-const PAGES: Record<string, string> = { "/": "index.html", "/brand": "brand.html", "/creator": "creator.html", "/verify": "verify.html" };
+const PAGES: Record<string, string> = { "/": "index.html", "/brand": "brand.html", "/creator": "creator.html", "/verify": "verify.html", "/agent": "agent.html" };
 
 function isLocal(req: IncomingMessage) {
   const a = req.socket.remoteAddress ?? "";

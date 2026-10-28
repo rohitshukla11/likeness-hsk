@@ -23,7 +23,7 @@ const NETWORK = { 133: "HSK Chain testnet (133)", 177: "HSK Chain mainnet (177)"
 
 /** Header, plus a banner that says plainly which chain and which HSP Gateway this server uses. */
 export function header(active, state) {
-  const links = [["/", "Overview"], ["/brand", "Brand console"], ["/creator", "Creator"], ["/verify", "Verify"]];
+  const links = [["/", "Overview"], ["/brand", "Brand console"], ["/creator", "Creator"], ["/verify", "Verify"], ["/agent", "Agent card"]];
   const gw =
     state?.gateway === "hsp"
       ? `HSP Gateway: HashKey (live merchant credentials)`

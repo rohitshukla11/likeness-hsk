@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Creator agent card</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main>
+      <h1>The creator's agent (A2A)</h1>
+      <p class="lede">
+        The receiving agent publishes this A2A agent card at <a href="/.well-known/agent-card.json">/.well-known/agent-card.json</a>. A
+        payment agent reads it to find the agent's skills, its AP2 merchant role, where the creator's terms live on HSK Chain, and the
+        merchant key that signs every Cart Mandate.
+      </p>
+      <div class="grid">
+        <div>
+          <div class="panel">
+            <h2>Skills</h2>
+            <div id="skills"></div>
+          </div>
+          <div class="panel">
+            <h2>Extensions</h2>
+            <dl id="ext"></dl>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Card</h2>
+          <pre id="card" class="mono" style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-size: 12px"></pre>
+        </div>
+      </div>
+    </main>
+    <script type="module">
+      import { api, header, esc, addrLink } from "/static/app.js";
+      const s = await api("/api/state");
+      header("/agent", s);
+      const card = await api("/.well-known/agent-card.json");
+      document.querySelector("#skills").innerHTML = card.skills
+        .map((k) => `<p><b>${esc(k.name)}</b> <span class="note mono">${esc(k.id)}</span><br>${esc(k.description)}</p>`)
+        .join("");
+      const ap2 = card.capabilities.extensions.find((e) => e.params?.roles);
+      const dep = card.capabilities.extensions.find((e) => e.params?.merchantPublicKey)?.params ?? {};
+      const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+      document.querySelector("#ext").innerHTML =
+        row("AP2", `${esc(ap2?.params?.roles?.join(", "))} · <span class="note">${esc(ap2?.uri)}</span>`) +
+        row("protocol", `A2A ${esc(card.protocolVersion)}, ${esc(card.preferredTransport)} at <span class="mono">${esc(card.url)}</span>`) +
+        row("creator", addrLink(s, dep.creator)) +
+        row("chain", `${dep.chainId}`) +
+        row("settlement", addrLink(s, dep.settlement)) +
+        row("token", `${esc(dep.coin)} ${addrLink(s, dep.token)}`) +
+        row("merchant key", `<span class="note">ES256K public key, shown in the card</span>`);
+      document.querySelector("#card").textContent = JSON.stringify(card, null, 2);
+    </script>
+  </body>
+</html>
