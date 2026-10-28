@@ -23,8 +23,8 @@
     </main>
     <script type="module">
       import { api, header, esc, txLink, addrLink, sha256Hex, saveBlob } from "/static/app.js";
-      header("/verify");
       const s = await api("/api/state");
+      header("/verify", s);
       const out = document.querySelector("#out");
       async function check(hash) {
         out.innerHTML = "Checking…";
@@ -34,13 +34,24 @@
             out.innerHTML = `<div class="big">Unknown</div><p>${esc(v.reason)}</p>`;
             return;
           }
-          out.innerHTML = `<div class="big"><span class="pill ${esc(v.verdict)}">${esc(v.verdict)}</span></div>
-            <dl style="margin-top:10px">
-              <dt>licence</dt><dd>#${esc(v.licenceId)} (${esc(v.licenceStatus)}), render ${v.renderIndex}</dd>
+          const meaning = {
+            Licensed: "Made under a licence that is still in force.",
+            Expired: "Licensed when made; the licence has since ended.",
+            Revoked: "Licensed when made; the creator has since revoked the licence.",
+          }[v.verdict];
+          out.innerHTML = `<div class="big"><span class="pill ${esc(v.verdict)}">${esc(v.verdict)}</span></div><p>${esc(meaning)}</p>
+            <h2 style="margin-top:14px">Receipt</h2>
+            <dl>
+              <dt>licence</dt><dd>#${esc(v.licenceId)}, render ${v.renderIndex} (licence now ${esc(v.licenceStatus)}, ${v.licenceStatus === "Expired" ? "ended" : "ends"} ${new Date(v.licenceEnd * 1000).toLocaleDateString()})</dd>
               <dt>creator</dt><dd>${addrLink(s, v.creator)}</dd>
               <dt>licensee</dt><dd>${addrLink(s, v.licensee)}</dd>
-              <dt>paid</dt><dd>${esc(v.paid)} ${esc(s.token)} through HSP ${txLink(s, v.hspTxHash)}</dd>
-              <dt>anchored</dt><dd>${new Date(v.anchoredAt * 1000).toLocaleString()}</dd>
+              <dt>anchored</dt><dd>${new Date(v.anchoredAt * 1000).toLocaleString()} ${v.anchorTx ? txLink(s, v.anchorTx) : ""}</dd>
+            </dl>
+            <h2 style="margin-top:14px">Payment</h2>
+            <dl>
+              <dt>amount</dt><dd>${esc(v.paid)} ${esc(s.token)}, paid through the HSP Gateway ${txLink(s, v.hspTxHash)}</dd>
+              <dt>recorded</dt><dd>${new Date(v.paidAt * 1000).toLocaleString()} ${v.recordTx ? txLink(s, v.recordTx) : ""}</dd>
+              <dt>binding</dt><dd>${v.nonceBound ? "the brand's authorization nonce was bound to this licence and render" : "the Gateway chose the nonce; the creator's agent attested the binding"}</dd>
             </dl>
             <p><button class="ghost" id="dl">Download as the licensee (wallet signature)</button></p>
             <p class="note">Only the licensee's wallet can download a licensed render: the server checks the signature against the licence on chain.</p>`;
@@ -69,6 +80,8 @@
         drop.classList.remove("over");
         if (e.dataTransfer.files[0]) check(await sha256Hex(e.dataTransfer.files[0]));
       });
+      const q = new URLSearchParams(location.search).get("hash");
+      if (q && /^0x[0-9a-fA-F]{64}$/.test(q)) check(q);
       document.querySelector("#hash").addEventListener("change", (e) => /^0x[0-9a-fA-F]{64}$/.test(e.target.value.trim()) && check(e.target.value.trim()));
     </script>
   </body>

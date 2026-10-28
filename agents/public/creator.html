@@ -28,11 +28,19 @@
           <div id="result"></div>
         </div>
       </div>
+      <div class="panel" style="margin-top: 16px">
+        <h2>Payments received</h2>
+        <p class="note">Each one is a stablecoin transfer the HSP Gateway executed from the brand's wallet straight to the creator's payout, recorded by the creator's agent only after the chain showed the brand's authorization had executed.</p>
+        <table>
+          <thead><tr><th>licence · render</th><th>from</th><th>amount</th><th>HSP payment</th><th>recorded</th><th>nonce</th><th>receipt</th></tr></thead>
+          <tbody id="payments"></tbody>
+        </table>
+      </div>
     </main>
     <script type="module">
       import { api, header, esc, txLink, addrLink } from "/static/app.js";
-      header("/creator");
       const s = await api("/api/state");
+      header("/creator", s);
       const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
       const cats = (bits) => ["advertising", "social", "editorial", "entertainment", "product"].filter((_, i) => bits & (1 << (8 + i))).join(", ");
       document.querySelector("#terms").innerHTML =
@@ -54,6 +62,17 @@
               .join("")
           : `<tr><td colspan="5" class="note">No licences yet.</td></tr>`;
       }
+      async function showPayments() {
+        const list = await api("/api/payments?who=creator");
+        document.querySelector("#payments").innerHTML = list.length
+          ? list
+              .map(
+                (p) =>
+                  `<tr><td>${esc(p.licenceId)} · ${p.renderIndex}</td><td>${addrLink(s, p.payer)}</td><td>${(Number(p.amount) / 1e6).toFixed(2)} ${esc(s.token)}</td><td>${txLink(s, p.hspTx)}</td><td>${txLink(s, p.recordTx)}</td><td>${p.nonceBound ? "bound to the render" : "from the Gateway"}</td><td>${p.anchorTx ? txLink(s, p.anchorTx) : '<span class="note">not delivered yet</span>'}</td></tr>`,
+              )
+              .join("")
+          : `<tr><td colspan="7" class="note">No payments yet.</td></tr>`;
+      }
       document.querySelector("#licences").addEventListener("click", async (ev) => {
         const id = ev.target?.dataset?.revoke;
         if (!id) return;
@@ -66,7 +85,7 @@
         }
         await show();
       });
-      await show();
+      await Promise.all([show(), showPayments()]);
     </script>
   </body>
 </html>

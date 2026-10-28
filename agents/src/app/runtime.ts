@@ -9,7 +9,8 @@ import { HspClient } from "../hsp/client.js";
 import { HspGatewayEmulator } from "../hsp/emulator.js";
 import { keychainPassword, loadAccount } from "../keys.js";
 import { MessageLog } from "../log.js";
-import { RenderAgent } from "../render/renderAgent.js";
+import { geminiRenderer } from "../render/gemini.js";
+import { RenderAgent, testRenderer, type Renderer } from "../render/renderAgent.js";
 import { RenderStore } from "./store.js";
 
 export type Mode = "local" | "testnet" | "mainnet";
@@ -18,6 +19,7 @@ export interface Runtime {
   mode: Mode;
   operator: boolean; // may this server act for the brand and the creator (license, pay, revoke)?
   gateway: "hsp" | "emulator";
+  renderer: "gemini" | "test";
   chain: Likeness;
   log: MessageLog;
   creatorAgent: CreatorAgent;
@@ -35,6 +37,20 @@ export interface Runtime {
 
 export const ADVERTISING = 1 << 8;
 
+/** Gemini only when a key is set (each render is a paid call); otherwise the marked TEST RENDER. */
+function pickRenderer(): { name: "gemini" | "test"; renderer: Renderer } {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return { name: "test", renderer: testRenderer };
+  return {
+    name: "gemini",
+    renderer: geminiRenderer({
+      apiKey,
+      model: process.env.GEMINI_IMAGE_MODEL,
+      creatorDescription: "Ana Reyes, a synthetic demo creator: warm smile, curly dark hair, olive skin, late twenties",
+    }),
+  };
+}
+
 const POLICY = { maxPricePerRender: 100_000n, allowedCategories: ADVERTISING, dailyBudget: 1_000_000n, maxRendersPerLicence: 5 };
 
 /**
@@ -45,6 +61,7 @@ const POLICY = { maxPricePerRender: 100_000n, allowedCategories: ADVERTISING, da
  */
 export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: string; operator: boolean }): Promise<Runtime> {
   const store = new RenderStore(`${opts.root}renders`);
+  const r = pickRenderer();
   if (opts.mode === "local") {
     const n = await startDevnet({ rail: "permit2", publicUrl: opts.publicUrl });
     let conn: CreatorConnection | undefined;
@@ -52,11 +69,12 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
       mode: "local",
       operator: opts.operator,
       gateway: "emulator",
+      renderer: r.name,
       chain: n.chain,
       log: n.log,
       creatorAgent: n.creatorAgent,
       brand: n.brand,
-      render: n.render,
+      render: r.name === "test" ? n.render : new RenderAgent(n.accounts.renderAgent, n.chain, n.log, r.renderer),
       store,
       creator: n.accounts.creator.address,
       brandAddress: n.accounts.brand.address,
@@ -139,11 +157,12 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     mode: opts.mode,
     operator: opts.operator,
     gateway,
+    renderer: r.name,
     chain,
     log,
     creatorAgent,
     brand,
-    render: new RenderAgent(renderKey, chain, log),
+    render: new RenderAgent(renderKey, chain, log, r.renderer),
     store,
     creator: creator.address,
     brandAddress: brandKey.address,
@@ -189,4 +208,38 @@ export async function listLicences(rt: Runtime, by: { creator?: Address; license
       };
     }),
   );
+}
+
+const paymentRecorded = parseAbiItem(
+  "event PaymentRecorded(uint256 indexed licenceId, uint32 indexed renderIndex, address indexed payer, address payout, uint128 amount, bytes32 nonce, bool nonceBound, bytes32 hspTxHash, bytes32 hspPaymentRef)",
+);
+const renderAnchored = parseAbiItem("event RenderAnchored(uint256 indexed licenceId, uint32 indexed renderIndex, bytes32 assetHash, address agent)");
+
+/** Payments recorded on chain (optionally for one licence and render), with their receipts. */
+export async function listPayments(rt: Runtime, filter: { licenceIds?: Set<string>; licenceId?: bigint; renderIndex?: number } = {}) {
+  const base = { address: rt.chain.d.settlement, fromBlock: rt.startBlock, toBlock: "latest" as const };
+  const args = filter.licenceId !== undefined ? { licenceId: filter.licenceId, renderIndex: filter.renderIndex } : undefined;
+  const [paid, anchored] = await Promise.all([
+    rt.chain.public.getLogs({ ...base, event: paymentRecorded, args }),
+    rt.chain.public.getLogs({ ...base, event: renderAnchored, args }),
+  ]);
+  const receipts = new Map(anchored.map((a) => [`${a.args.licenceId}-${a.args.renderIndex}`, a]));
+  return paid
+    .filter((p) => !filter.licenceIds || filter.licenceIds.has(String(p.args.licenceId)))
+    .map((p) => {
+      const a = receipts.get(`${p.args.licenceId}-${p.args.renderIndex}`);
+      return {
+        licenceId: String(p.args.licenceId),
+        renderIndex: p.args.renderIndex!,
+        payer: p.args.payer!,
+        payout: p.args.payout!,
+        amount: String(p.args.amount),
+        nonceBound: p.args.nonceBound!,
+        hspTx: p.args.hspTxHash!,
+        recordTx: p.transactionHash,
+        assetHash: a?.args.assetHash ?? null,
+        anchorTx: a?.transactionHash ?? null,
+      };
+    })
+    .reverse();
 }

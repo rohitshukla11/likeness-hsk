@@ -67,6 +67,18 @@ a { color: var(--accent); }
 .ev.refused .sum, .ev.error .sum { color: var(--warn); }
 .ev details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .ev pre { margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: 6px; overflow: auto; max-height: 280px; font: 12px/1.4 var(--mono); }
-.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 28px; text-align: center; color: var(--muted); }
+.drop { display: block; cursor: pointer; border: 2px dashed var(--line); border-radius: 10px; padding: 36px 16px; text-align: center; color: var(--muted); }
+input { font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 .drop.over { border-color: var(--accent); color: var(--ink); }
 .big { font-size: 26px; font-weight: 700; }
+.banner { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 8px 20px; font-size: 13px; background: #fff4e6; color: #7a3e00; border-bottom: 1px solid #ffd8a8; }
+.banner.live { background: #ebfbee; color: #1b5e20; border-color: #b2f2bb; }
+@media (prefers-color-scheme: dark) { .banner { background: #2b1d0e; color: #ffc078; border-color: #5c3b12; } .banner.live { background: #10261a; color: #8ce99a; border-color: #1f4d2c; } }
+.steps { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+.steps li { position: relative; padding: 8px 0 10px 40px; border-left: 2px solid var(--line); margin-left: 14px; counter-increment: step; }
+.steps li::before { content: counter(step); position: absolute; left: -15px; top: 6px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; background: var(--panel); border: 2px solid var(--line); color: var(--muted); }
+.steps li.done::before { border-color: var(--ok); color: var(--ok); }
+.steps .t { font-weight: 600; }
+.steps .sum { margin-top: 2px; overflow-wrap: anywhere; }
+.steps pre { margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: 6px; overflow: auto; max-height: 260px; font: 12px/1.4 var(--mono); }
+.tabs { display: flex; gap: 8px; margin-bottom: 10px; }

@@ -9,7 +9,11 @@
   <body>
     <main>
       <h1>Brand console</h1>
-      <p class="lede">The brand's payment agent. It checks every cart against the brand's policy and the chain before the wallet signs.</p>
+      <p class="lede">
+        The brand's payment agent. It asks the creator's agent for each render's payment conditions (an AP2 Cart Mandate), checks
+        them against the brand's policy and the chain, signs a Payment Mandate with the brand wallet, and the HSP Gateway executes
+        the payment on HSK Chain.
+      </p>
       <div class="grid">
         <div>
           <div class="panel">
@@ -26,34 +30,86 @@
             </table>
             <div id="result"></div>
           </div>
+          <div class="panel">
+            <h2>Payments made</h2>
+            <table>
+              <thead><tr><th>licence · render</th><th>amount</th><th>HSP payment</th><th>recorded</th><th>receipt</th></tr></thead>
+              <tbody id="payments"></tbody>
+            </table>
+          </div>
         </div>
         <div class="panel">
-          <h2>Message log</h2>
-          <p class="note">A2A messages, AP2 mandates, HSP Gateway calls and webhooks, and on-chain transactions, in order.</p>
-          <div class="log" id="log"></div>
+          <div class="tabs"><button class="ghost" id="tab-steps">This render, step by step</button><button class="ghost" id="tab-log">Full message log</button></div>
+          <div id="steps"><p class="note">Pay for a render to see each step: A2A request → Cart Mandate → policy check → Payment Mandate → HSP Gateway → on-chain payment → recorded → receipt.</p></div>
+          <div class="log" id="log" hidden></div>
         </div>
       </div>
     </main>
     <script type="module">
-      import { api, header, esc, txLink, addrLink, startLog, saveBlob } from "/static/app.js";
-      header("/brand");
-      startLog(document.querySelector("#log"));
+      import { api, header, esc, txLink, addrLink, startLog, saveBlob, timeline } from "/static/app.js";
       const s = await api("/api/state");
+      header("/brand", s);
+      startLog(document.querySelector("#log"));
+      const stepsEl = document.querySelector("#steps");
+      const logEl = document.querySelector("#log");
+      document.querySelector("#tab-steps").onclick = () => ((stepsEl.hidden = false), (logEl.hidden = true));
+      document.querySelector("#tab-log").onclick = () => ((stepsEl.hidden = true), (logEl.hidden = false));
       const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+      const usd = (units) => (Number(units) / 1e6).toFixed(2);
       const showWho = async () => {
         const st = await api("/api/state");
         document.querySelector("#who").innerHTML =
           row("wallet", addrLink(st, st.brand)) +
-          row("policy", `≤ 0.10 ${esc(st.token)} per render, advertising only, 1.00 ${esc(st.token)} a day`) +
-          row("spent today", `${(Number(st.spentToday) / 1e6).toFixed(2)} ${esc(st.token)}`) +
+          row("policy", `≤ 0.10 ${esc(st.token)} per render · advertising only · 1.00 ${esc(st.token)} a day`) +
+          row("spent today", `${usd(st.spentToday)} ${esc(st.token)} (this session)`) +
           row("creator's price", `${esc(st.terms.price)} ${esc(st.token)} per render`);
       };
       await showWho();
       if (!s.operator) {
         document.querySelector("#license").disabled = true;
-        document.querySelector("#opnote").textContent = "Operator actions are off on this server; the log and Verify still work.";
+        document.querySelector("#opnote").textContent = "Operator actions are off on this server; the log, payments and Verify still work.";
       }
       const result = document.querySelector("#result");
+      async function showLicences() {
+        const list = await api("/api/licences?who=brand");
+        document.querySelector("#licences").innerHTML = list.length
+          ? list
+              .map(
+                (l) =>
+                  `<tr><td>${esc(l.id)}</td><td><span class="pill ${esc(l.status)}">${esc(l.status)}</span></td><td>${l.renderCount} / ${l.renderCap}</td><td><button class="ghost" data-pay="${esc(l.id)}" ${s.operator ? "" : "disabled"}>Pay for next render</button></td></tr>`,
+              )
+              .join("")
+          : `<tr><td colspan="4" class="note">No licences yet.</td></tr>`;
+      }
+      async function showPayments() {
+        const list = await api("/api/payments?who=brand");
+        document.querySelector("#payments").innerHTML = list.length
+          ? list
+              .map(
+                (p) =>
+                  `<tr><td><a href="#" data-trace="${esc(p.licenceId)}-${p.renderIndex}">${esc(p.licenceId)} · ${p.renderIndex}</a></td><td>${usd(p.amount)} ${esc(s.token)}</td><td>${txLink(s, p.hspTx)}</td><td>${txLink(s, p.recordTx)}</td><td>${p.anchorTx ? txLink(s, p.anchorTx) : '<span class="note">pending</span>'}</td></tr>`,
+              )
+              .join("")
+          : `<tr><td colspan="5" class="note">No payments yet.</td></tr>`;
+      }
+      async function showTrace(licenceId, renderIndex) {
+        try {
+          const events = await api(`/api/trace?licenceId=${licenceId}&renderIndex=${renderIndex}`);
+          stepsEl.innerHTML = `<p>Render ${renderIndex} of licence ${esc(licenceId)}</p>${timeline(s, events)}`;
+          stepsEl.hidden = false;
+          logEl.hidden = true;
+        } catch {
+          /* paid before this server's log began */
+        }
+      }
+      document.querySelector("#payments").addEventListener("click", (ev) => {
+        const t = ev.target?.dataset?.trace;
+        if (!t) return;
+        ev.preventDefault();
+        const [l, r] = t.split("-");
+        showTrace(l, r);
+      });
+      const refresh = () => Promise.all([showLicences(), showWho(), showPayments()]);
       const busy = async (btn, fn) => {
         btn.disabled = true;
         try {
@@ -62,28 +118,26 @@
           result.innerHTML = `<div class="result err">${esc(e.message)}</div>`;
         } finally {
           btn.disabled = !s.operator;
-          await Promise.all([showLicences(), showWho()]);
+          await refresh();
         }
       };
-      async function showLicences() {
-        const list = await api("/api/licences?who=brand");
-        document.querySelector("#licences").innerHTML = list.length
-          ? list
-              .map(
-                (l) =>
-                  `<tr><td>${esc(l.id)}</td><td><span class="pill ${esc(l.status)}">${esc(l.status)}</span></td><td>${l.renderCount} / ${l.renderCap}</td><td><button class="ghost" data-pay="${esc(l.id)}" ${l.status === "Active" && s.operator ? "" : "disabled"}>Pay for next render</button></td></tr>`,
-              )
-              .join("")
-          : `<tr><td colspan="4" class="note">No licences yet.</td></tr>`;
-      }
       document.querySelector("#licences").addEventListener("click", (ev) => {
         const id = ev.target?.dataset?.pay;
         if (!id) return;
         busy(ev.target, async () => {
-          result.innerHTML = `<div class="result note">Paying through the HSP Gateway…</div>`;
-          const r = await api("/api/brand/pay", { licenceId: id, brief: "spring campaign hero shot" });
+          stepsEl.hidden = false;
+          logEl.hidden = true;
+          stepsEl.innerHTML = `<p class="note">Paying through the HSP Gateway… (about 10–30 s on testnet)</p>`;
+          let r;
+          try {
+            r = await api("/api/brand/pay", { licenceId: id, brief: "spring campaign hero shot" });
+          } catch (e) {
+            stepsEl.innerHTML = `<div class="result err">Refused: ${esc(e.message)}</div><p class="note">Nothing was signed and no money moved.</p>`;
+            throw e;
+          }
+          const events = (await api(`/api/log?since=${r.fromSeq}`)).filter((e) => e.seq <= r.toSeq);
+          stepsEl.innerHTML = `<p>Render ${r.renderIndex} of licence ${esc(r.licenceId)}: paid, recorded and delivered.</p>${timeline(s, events)}`;
           result.innerHTML = `<div class="result">
-            <div>Render ${r.renderIndex} of licence ${esc(r.licenceId)} paid and delivered.</div>
             <div>HSP payment ${txLink(s, r.hspTx)} · receipt ${txLink(s, r.anchorTx)} · nonce ${r.nonceBound ? "bound to this render" : "assigned by the Gateway"}</div>
             <div class="mono">sha256 ${esc(r.assetHash)}</div>
             <p><button class="ghost" id="dl">Download (signed by the brand wallet)</button></p></div>`;
@@ -91,7 +145,8 @@
             const claim = await api("/api/brand/download", { assetHash: r.assetHash });
             const res = await fetch(`/api/renders/${r.assetHash}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(claim) });
             if (!res.ok) return alert((await res.json()).error);
-            saveBlob(await res.blob(), `likeness-render-${r.licenceId}-${r.renderIndex}.svg`);
+            const blob = await res.blob();
+            saveBlob(blob, `likeness-render-${r.licenceId}-${r.renderIndex}${blob.type === "image/svg+xml" ? ".svg" : ".png"}`);
           };
         });
       });
@@ -100,7 +155,9 @@
           const r = await api("/api/brand/license", { renderCap: 3 });
           result.innerHTML = `<div class="result">Licence ${esc(r.licenceId)} issued on chain, within the creator's published terms.</div>`;
         });
-      await showLicences();
+      await refresh();
+      const latest = (await api("/api/payments?who=brand"))[0];
+      if (latest && latest.anchorTx) await showTrace(latest.licenceId, latest.renderIndex);
     </script>
   </body>
 </html>

@@ -32,8 +32,8 @@
     </main>
     <script type="module">
       import { api, header, esc, addrLink } from "/static/app.js";
-      header("/");
       const s = await api("/api/state");
+      header("/", s);
       const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
       document.querySelector("#state").innerHTML =
         row("network", `${esc(s.mode)} (chain ${s.chainId})`) +

@@ -1,4 +1,4 @@
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
 /**
  * The message log the app shows: every A2A message, mandate, HSP call and transaction, in order.
@@ -44,7 +44,21 @@ export class MessageLog {
   readonly events: LogEvent[] = [];
   private seq = 0;
 
-  constructor(private readonly file?: string) {}
+  /** With a file, earlier events are reloaded so the history survives a restart. */
+  constructor(private readonly file?: string) {
+    if (file && existsSync(file)) {
+      for (const line of readFileSync(file, "utf8").split("\n")) {
+        if (!line.trim()) continue;
+        try {
+          const e = JSON.parse(line) as LogEvent;
+          this.events.push(e);
+          this.seq = Math.max(this.seq, e.seq);
+        } catch {
+          /* a partial line from a crash */
+        }
+      }
+    }
+  }
 
   add(actor: LogEvent["actor"], kind: LogEvent["kind"], summary: string, data?: unknown): LogEvent {
     const e: LogEvent = { seq: ++this.seq, at: new Date().toISOString(), actor, kind, summary, data: redact(JSON.parse(json(data ?? null))) };

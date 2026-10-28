@@ -72,7 +72,15 @@ describe("the app server (local devnet, emulated HSP Gateway)", () => {
     const again = await post("/api/brand/pay", { licenceId });
     expect(again.status).toBe(409);
     expect((await again.json()).error).toMatch(/revoked/);
-    expect((await getJson(`/api/verify?hash=${paid.assetHash}`)).verdict).toBe("Revoked");
+    const v = await getJson(`/api/verify?hash=${paid.assetHash}`);
+    expect(v.verdict).toBe("Revoked");
+    expect(v.recordTx).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(v.anchorTx).toMatch(/^0x[0-9a-f]{64}$/);
+    const payments = await getJson("/api/payments?who=creator");
+    const mine = payments.find((p: { licenceId: string }) => p.licenceId === licenceId);
+    expect(mine.amount).toBe("50000");
+    expect(mine.hspTx).toBe(paid.hspTx);
+    expect(mine.anchorTx).toBe(paid.anchorTx);
     const list = await getJson("/api/licences?who=creator");
     expect(list.find((l: { id: string }) => l.id === licenceId).status).toBe("Revoked");
   });
