@@ -12,7 +12,9 @@
   "scripts": {
     "abi": "tsx scripts/abi.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy": "tsx scripts/deploy.ts",
+    "testnet": "tsx scripts/run-testnet.ts"
   },
   "dependencies": {
     "viem": "2.57.2"

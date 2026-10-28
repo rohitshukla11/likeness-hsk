@@ -26,3 +26,6 @@ renders/
 # ------------------------------------------------ editor and OS
 .DS_Store
 .vscode/
+
+# local run logs (public data, regenerated each run)
+deployments/*.jsonl
