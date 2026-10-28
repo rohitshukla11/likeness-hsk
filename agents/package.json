@@ -15,7 +15,9 @@
     "test": "vitest run",
     "deploy": "tsx scripts/deploy.ts",
     "testnet": "tsx scripts/run-testnet.ts",
-    "app": "tsx src/app/server.ts"
+    "app": "tsx src/app/server.ts",
+    "fund": "tsx scripts/fund.ts",
+    "recover": "tsx scripts/recover-payment.ts"
   },
   "dependencies": {
     "viem": "2.57.2"
