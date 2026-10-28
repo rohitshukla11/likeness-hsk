@@ -82,5 +82,41 @@ which has no version field.
   wallet signature;
 - 4 integration tests, including that a stranger's or a stale signature is refused.
 
+## HSK Chain testnet (chain 133), 28 October
+
+Deployed on the USDT / Permit2 rail. `TestUSDT` is a testnet-only token with no value. HSP's testnet
+USDT has no public faucet. All addresses are in `deployments/testnet.json`.
+
+| Contract | Address |
+|---|---|
+| CreatorRegistry | [`0x388c…a6be`](https://testnet-explorer.hskchain.net/address/0x388cd6c6ee71aed1d052894b6981fdb9c7aad6be) |
+| LicenseRegistry | [`0x91e2…aff4`](https://testnet-explorer.hskchain.net/address/0x91e2df3ec2188812eb026ce101af4e772a43aff4) |
+| ReceiptAnchor | [`0x9da3…e4c1`](https://testnet-explorer.hskchain.net/address/0x9da3a94fc7924be25e573bafaf5ef33d2749e4c1) |
+| HspSettlement | [`0x4a2b…f869`](https://testnet-explorer.hskchain.net/address/0x4a2bafa2279ea1b0ca67fb8d149eebbc890bf869) |
+| TestUSDT | [`0xc033…fcea`](https://testnet-explorer.hskchain.net/address/0xc0336d73fde52b1c8463b7f746da33e71102fcea) |
+
+**End-to-end run** (`pnpm run testnet`), with the agents and the local HSP Gateway emulator:
+1. Licence 2 [issued](https://testnet-explorer.hskchain.net/tx/0x227e9e8535d990418ee133840e7ae0a685532809a8ebf20b5d793cbcea2dcf92).
+2. The brand's [Permit2 payment](https://testnet-explorer.hskchain.net/tx/0xb824828c93d12195b5f7aee4f6034b3075aee9beb03f6599628ba89d72a4d047)
+   of 0.05 tUSDT straight to the creator's payout.
+3. The creator agent's [recordPayment](https://testnet-explorer.hskchain.net/tx/0x8fc26d6a160195968cccd46dd7e18dc6d340e9dcb470f6ae410c73e4c3aac25c),
+   with the nonce bound to the render.
+4. The render agent's [receipt](https://testnet-explorer.hskchain.net/tx/0xa403c6783e16d76ed03d86b3765b5950a6088badc554edf89e9cec078e8a5b95).
+5. The creator [revokes](https://testnet-explorer.hskchain.net/tx/0x06c1d65ad55a3f5c94d556cb07e18659b848bc17e84258702c182439865a660f),
+   and the brand agent refuses the next payment before signing.
+
+Read back on chain afterwards: licence 2 is Revoked, the receipt exists, the payment record holds
+the brand, 0.05 tUSDT, `nonceBound = true` and the HSP transaction hash, and the settlement holds
+nothing.
+
+**What the testnet run found.** The first run's payment executed, but recording it failed:
+- **The cause:** the public RPC answered the contract simulation from a node that hadn't yet seen the
+  payment block, so the contract returned `PaymentNotExecuted`. Reads after a receipt can also be
+  stale.
+- **The fix:** the creator agent waits for the payment's block and retries that revert, and nonces
+  are counted locally.
+- **The recovery:** `pnpm run recover` records a missed payment with the same checks. It recorded
+  licence 1's payment ([tx](https://testnet-explorer.hskchain.net/tx/0x041b750681aa68a8d31514246876fe27811b818b1ea41efc015af728c0b6e68e)).
+
 Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive) and the
 mainnet deployment.

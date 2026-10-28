@@ -1,0 +1,31 @@
+{
+  "network": "testnet",
+  "chainId": 133,
+  "rpcUrl": "https://testnet.hsk.xyz",
+  "explorer": "https://testnet-explorer.hskchain.net",
+  "hspNetwork": "hashkey-testnet",
+  "deployedAt": "2026-10-28T10:24:39.149Z",
+  "startBlock": 34998210,
+  "owner": "0x80Bc5b9E582ebB58031FDbCA9C015c8e9EE85AA7",
+  "attester": "0x9df123EE1a6cF801B74472CB66DBb2615E4033e5",
+  "renderAgent": "0xd266CB9Edc93E722655Dc435B375e72Afa183586",
+  "rail": "permit2",
+  "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+  "token": "0xc0336d73fde52b1c8463b7f746da33e71102fcea",
+  "tokenSymbol": "USDT",
+  "testToken": true,
+  "creators": "0x388cd6c6ee71aed1d052894b6981fdb9c7aad6be",
+  "licences": "0x91e2df3ec2188812eb026ce101af4e772a43aff4",
+  "receipts": "0x9da3a94fc7924be25e573bafaf5ef33d2749e4c1",
+  "settlement": "0x4a2bafa2279ea1b0ca67fb8d149eebbc890bf869",
+  "txs": {
+    "CreatorRegistry": "0xb5c0478f66cf90fc0448c974644c18fa1195f989349b601f1404619ae4a72b3d",
+    "LicenseRegistry": "0xe7a5ba0b94daa26ca7fc79ebeeff3a238b8e0ba22ccfdf48bddf0d8b8610ff6e",
+    "ReceiptAnchor": "0x1cb73cf392cb25b89c897e4b24580815b25d9b3b92aca38ed1eab73b060408fa",
+    "TestUSDT": "0x1ecbf5ef1c97d14eb088ff7ba48c847bf2304112347c6494e4265b46c01564a2",
+    "HspSettlement": "0x410e33f928474c0486cdb52c37f28bcd1c5f8bcc82dfd92839a52cad44d57cbf",
+    "setSettlement(L)": "0x22d398fd41cab433b7022b7e6cc9092317169ac632ac938b45543718e2494d9b",
+    "setSettlement(R)": "0xcb111f2103dd7356d379e37d55dd0ac12237d930694c65b2bd439896124efe0e",
+    "setRenderAgent": "0x286bfc054d58ce12256201c220eceaa74498460cf4076da0a02246ab46b00da6"
+  }
+}
