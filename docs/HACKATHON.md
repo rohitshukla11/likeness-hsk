@@ -70,5 +70,17 @@ fail. The README says plainly what the chain proves and what the creator's agent
 A test double was corrected along the way: `MockPermit2` now has the real Permit2 EIP-712 domain,
 which has no version field.
 
-Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive), the app,
-and the mainnet deployment.
+**Deployment tooling (new):**
+- `scripts/deploy.ts`: the USDT / Permit2 rail. Dry run by default; mainnet only with explicit
+  confirmation.
+- `TestUSDT`: a testnet-only token with no value.
+- `scripts/run-testnet.ts`: the agents end to end on chain 133.
+
+**Demo app (new, `agents/src/app`, `agents/public`):**
+- a brand console with the live message log, a creator page with revoke, and a Verify page;
+- a fix for a hole found in the likeness-arc audit: downloading a render now needs the licensee's
+  wallet signature;
+- 4 integration tests, including that a stranger's or a stale signature is refused.
+
+Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive) and the
+mainnet deployment.

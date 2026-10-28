@@ -93,6 +93,25 @@ The end-to-end tests run on a local chain with the real contracts:
 - the USDT/Permit2 rail;
 - refusals: revoked, used up, over budget, a tampered cart, a forged webhook.
 
+## The demo app
+
+```sh
+cd agents && pnpm app                          # local: a devnet with throwaway keys and the emulated HSP Gateway
+LIKENESS_MODE=testnet pnpm app                 # HSK Chain testnet (deployments/testnet.json and the keystores)
+```
+
+Open http://127.0.0.1:8788.
+
+**Pages:**
+- **Brand console:** take a licence, pay for a render, and watch the live message log of A2A messages, AP2 mandates, HSP calls and webhooks, and transactions.
+- **Creator:** the terms on chain and the licences, with revoke.
+- **Verify:** the file is hashed in the browser and looked up on chain.
+
+**Server behaviour:**
+- The same server hosts the creator agent's A2A card, `/a2a` and the HSP webhook.
+- Licensing, paying and revoking are operator actions, accepted only from this machine.
+- **Downloading a render needs the licensee's wallet signature** over a dated claim. The server checks it against the licence on chain, so knowing a file's hash is not enough. In likeness-arc it was.
+
 ## Contracts and tests
 
 ```sh
