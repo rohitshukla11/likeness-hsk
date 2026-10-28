@@ -75,7 +75,7 @@ sequenceDiagram
     participant B as Brand agent (payment agent)
     participant C as Creator agent (receiving agent, HSP merchant)
     participant H as HSP Gateway
-    participant S as HSK Chain: Licence, Settlement, Receipt contracts
+    participant S as HSK Chain (licence, settlement, receipt contracts)
     participant R as Render agent
     B->>S: request licence (auto-approved within the creator's terms)
     B->>C: A2A message/send: render-payment for licence N
