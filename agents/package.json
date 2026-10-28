@@ -17,7 +17,8 @@
     "testnet": "tsx scripts/run-testnet.ts",
     "app": "tsx src/app/server.ts",
     "fund": "tsx scripts/fund.ts",
-    "recover": "tsx scripts/recover-payment.ts"
+    "recover": "tsx scripts/recover-payment.ts",
+    "hsp:check": "tsx scripts/hsp-check.ts"
   },
   "dependencies": {
     "viem": "2.57.2"

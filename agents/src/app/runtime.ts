@@ -6,6 +6,7 @@ import { chainOf, licenseRegistryAbi, Likeness, type Deployment } from "../chain
 import { CreatorAgent } from "../creator-agent/agent.js";
 import { startDevnet } from "../dev/devnet.js";
 import { HspClient } from "../hsp/client.js";
+import { loadHspConfig } from "../hsp/config.js";
 import { HspGatewayEmulator } from "../hsp/emulator.js";
 import { keychainPassword, loadAccount } from "../keys.js";
 import { MessageLog } from "../log.js";
@@ -112,20 +113,19 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
   const key = (name: string) => loadAccount(`${opts.root}.secrets/keystores/${name}`, pw);
   const [creator, creatorAgentKey, brandKey, renderKey] = ["creator", "creator-agent", "brand", "render-agent"].map(key) as [LocalAccount, LocalAccount, LocalAccount, LocalAccount];
 
-  const credsPath = `${opts.root}.secrets/hsp/credentials.json`;
   const merchantPem = `${opts.root}.secrets/hsp/merchant_private_key.pem`;
+  const hsp = loadHspConfig(opts.root);
   let hspBase: string;
   let creds: { appKey: string; appSecret: string };
   let merchantKey: KeyObject;
   let emulator: HspGatewayEmulator | undefined;
   let permit2Spender: Address | undefined;
   let gateway: "hsp" | "emulator";
-  if (existsSync(credsPath)) {
-    const c = JSON.parse(readFileSync(credsPath, "utf8")) as { baseUrl: string; appKey: string; appSecret: string; permit2Spender?: Address };
-    hspBase = c.baseUrl;
-    creds = { appKey: c.appKey, appSecret: c.appSecret };
-    merchantKey = createPrivateKey(readFileSync(merchantPem, "utf8"));
-    permit2Spender = c.permit2Spender;
+  if (hsp) {
+    hspBase = hsp.baseUrl;
+    creds = { appKey: hsp.appKey, appSecret: hsp.appSecret };
+    merchantKey = hsp.merchantKey;
+    permit2Spender = hsp.permit2Spender;
     gateway = "hsp";
   } else {
     if (opts.mode === "mainnet") throw new Error("mainnet needs real HSP credentials (.secrets/hsp/credentials.json); the emulator is never used on mainnet");
@@ -144,14 +144,24 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     creator: creator.address,
     account: creatorAgentKey,
     chain,
-    hsp: new HspClient({ baseUrl: hspBase, credentials: creds }),
+    hsp: new HspClient({ baseUrl: hspBase, credentials: creds, payMandatePath: hsp?.payMandatePath }),
     webhookSecret: creds.appSecret,
     merchantKey,
-    merchantName: "Ana Reyes (synthetic demo creator)",
+    merchantName: hsp?.merchantName ?? "Ana Reyes (synthetic demo creator)",
+    jwtAudience: hsp?.jwtAudience,
+    recordAt: hsp?.recordAt,
     publicUrl: opts.publicUrl,
     log,
   });
-  const brand = new BrandAgent({ account: brandKey, chain, hsp: new HspClient({ baseUrl: hspBase }), policy: POLICY, log, permit2Spender });
+  const brand = new BrandAgent({
+    account: brandKey,
+    chain,
+    hsp: new HspClient({ baseUrl: hspBase, payMandatePath: hsp?.payMandatePath }),
+    policy: POLICY,
+    log,
+    permit2Spender,
+    jwtAudience: hsp?.jwtAudience,
+  });
   let conn: CreatorConnection | undefined;
   return {
     mode: opts.mode,
