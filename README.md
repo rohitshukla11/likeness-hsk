@@ -151,7 +151,9 @@ sequenceDiagram
   - the payer-side submit route;
   - where the Permit2 signature goes in the mandate, and the `user_authorization` format;
   - the JWT audience spelling.
-- **TestUSDT on testnet:** HSP's testnet USDT has no public faucet. On mainnet, HSP's own USDT is used.
+- **TestUSDT on testnet:** HSP's testnet USDT has no public faucet, and the official
+  [faucet](https://hskchain.net/faucet) gives testnet HSK only, so payments on testnet use our own
+  TestUSDT, which has no value. On mainnet, HSP's own USDT is used.
 - **Amount and recipient** are attested by the creator's agent, not proven on chain (see above).
 - **Renders:** a marked TEST RENDER by default. Gemini renders only when an API key is set.
 - **The demo creator is synthetic** (a generated face), attested by our own attester, not a KYC
