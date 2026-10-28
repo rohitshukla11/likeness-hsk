@@ -1,4 +1,9 @@
-# Mainnet runbook (HSK Chain, chain 177)
+# Mainnet runbook (HSK Chain, chain 177): if selected
+
+**This is the post-hackathon plan.** The HSK Chain organisers announced in the hackathon's Telegram
+group that projects don't need to deploy on mainnet during the hackathon: HSK testnet is the
+submission, and winners deploy to mainnet afterwards. The live deployment is on testnet (chain 133;
+see the README). This runbook is executed only if Likeness is selected.
 
 About 45 minutes. Nothing here runs without your word.
 - **Funding:** the scripts check for `LIKENESS_MAINNET_FUND=yes`, set only on your **"fund"**.

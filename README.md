@@ -43,8 +43,11 @@ What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 HashKey's published Merchant API, and the app says so on every page. The real-Gateway path is built and
 switches on with one config file ([docs/HSP_SETUP.md](docs/HSP_SETUP.md)).
 
-**Mainnet (chain 177):** the [runbook](docs/MAINNET_RUNBOOK.md) is ready and was rehearsed on a mainnet
-fork with real USDT and Permit2. Deployment follows once HSK is funded.
+**Mainnet-ready: one-command runbook, executed if selected.** The HSK Chain organisers announced in
+the hackathon's Telegram group that projects don't need a mainnet deployment during the hackathon:
+testnet is the submission, and winners deploy to mainnet afterwards. Our
+[runbook](docs/MAINNET_RUNBOOK.md) for HSK mainnet (chain 177) is written and was rehearsed end to end
+on a local fork of mainnet with real USDT, Permit2 and HSKSwap state.
 
 ## The problem
 

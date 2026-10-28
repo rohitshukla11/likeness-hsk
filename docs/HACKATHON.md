@@ -150,5 +150,6 @@ nothing.
 - **Mainnet runbook:** [MAINNET_RUNBOOK.md](MAINNET_RUNBOOK.md), rehearsed in full on a local fork
   of HSK mainnet with real USDT, Permit2 and HSKSwap state.
 
-Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive) and the
-mainnet deployment.
+Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive). The
+organisers announced that testnet is the submission and winners deploy to mainnet afterwards, so the
+mainnet runbook runs only if Likeness is selected.
