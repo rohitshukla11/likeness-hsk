@@ -165,8 +165,8 @@ sequenceDiagram
 
 ```sh
 git clone --recurse-submodules https://github.com/rohitshukla11/likeness-hsk && cd likeness-hsk
-(cd contracts && forge build && forge test)            # 71 contract tests; the mainnet fork suite runs with HSK_RPC_URL
-cd agents && pnpm install && pnpm test                 # 36 agent tests (anvil from Foundry needed)
+(cd contracts && forge build && forge test)            # 79 contract tests; fork suites run with HSK_RPC_URL / HSK_TESTNET_RPC_URL
+cd agents && pnpm install && pnpm test                 # 40 agent tests (anvil from Foundry needed)
 LIKENESS_MODE=local pnpm app                           # http://127.0.0.1:8788: a local chain, no keys needed
 ```
 
@@ -183,7 +183,7 @@ LIKENESS_MODE=local pnpm app                           # http://127.0.0.1:8788: 
 
 | Path | What |
 |---|---|
-| `contracts/` | The four contracts, 71 tests (unit, fuzz, both payment rails), and an HSK mainnet fork suite |
+| `contracts/` | The four contracts, 79 tests (unit, fuzz, both payment rails, a classic-Tether USDT), and HSK mainnet and testnet fork suites |
 | `agents/src/creator-agent`, `brand-agent`, `render` | The agents |
 | `agents/src/hsp` | The HSP client (HMAC, ES256K cart JWT, AP2 mandates, Permit2 and EIP-3009 signatures, webhooks) and the Gateway emulator |
 | `agents/src/a2a` | A2A agent card, JSON-RPC `message/send`, tasks |

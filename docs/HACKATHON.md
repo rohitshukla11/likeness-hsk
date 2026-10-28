@@ -64,10 +64,13 @@ Every commit since the copy, from `git log` (UTC):
 
 **Tests:**
 - **USDC.e rail:** 36 tests.
-- **Permit2 rail:** 6 tests.
+- **Permit2 rail:** 6 tests, run twice: on a plain ERC-20 USDT and on a classic-Tether mock (8 with
+  the mock's own checks).
 - **Reused:** the 29 registry tests.
 - **HSK mainnet fork:** 3 tests. They execute a real USDC.e `transferWithAuthorization` and a real
   Permit2 transfer against chain 177 state in a local fork; nothing is broadcast.
+- **HSK testnet fork:** 2 tests. HashKey's testnet USDT (classic Tether) paid through the real
+  Permit2 on chain 133 state, then recorded and anchored; nothing is broadcast.
 
 Mutation runs: without the executed-payment check, 9 tests fail; without the counts-once check, 2
 fail. The README says plainly what the chain proves and what the creator's agent attests.
@@ -149,6 +152,16 @@ nothing.
 - **Verification:** all five testnet contracts are source-verified on Blockscout.
 - **Mainnet runbook:** [MAINNET_RUNBOOK.md](MAINNET_RUNBOOK.md), rehearsed in full on a local fork
   of HSK mainnet with real USDT, Permit2 and HSKSwap state.
+
+## 29 October: HashKey's testnet USDT
+
+HashKey's testnet USDT (`0x3723…3CC6`, the token the HSP Gateway pays in on chain 133) is Tether's
+classic contract: `approve` and `transfer` return nothing, and a non-zero allowance must go to zero
+before another value. Nobody can get it without its owner (no faucet, no public mint, no pool), so
+the testnet deployment keeps TestUSDT, and the code is ready for the real token:
+- the agents approve through a SafeERC20-style `forceApprove` (`agents/src/chain/erc20.ts`);
+- `MockClassicUSDT` reruns the Permit2 suite and an end-to-end agent run on a classic-Tether token;
+- a testnet fork suite pays with the real token through the real Permit2.
 
 Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive). The
 organisers announced that testnet is the submission and winners deploy to mainnet afterwards, so the

@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { parseAbi, stringToHex, type Abi, type Address } from "viem";
 import { Refused } from "../src/brand-agent/agent.js";
 import { creatorRegistryAbi, hspSettlementAbi } from "../src/chain/contracts.js";
+import { forceApprove } from "../src/chain/erc20.js";
 import { keychainPassword, loadAccount } from "../src/keys.js";
 import { startRuntime, ADVERTISING } from "../src/app/runtime.js";
 import { deploymentsDir } from "../src/chain/networks.js";
@@ -74,7 +75,7 @@ try {
   if ((await rt.chain.agentOf(creator.address)).toLowerCase() !== creatorAgent.toLowerCase()) {
     await step("setAgent", creator, d.settlement, hspSettlementAbi as Abi, "setAgent", [creatorAgent]);
   }
-  const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)", "function mint(address,uint256)"]);
+  const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function mint(address,uint256)"]);
   const brand = rt.brandAccount();
   const balance = await rt.chain.public.readContract({ address: d.token, abi: erc20, functionName: "balanceOf", args: [brand.address] });
   if (balance < 2n * PRICE) {
@@ -82,7 +83,8 @@ try {
     await step("mint tUSDT to brand", key("deployer"), d.token, erc20 as Abi, "mint", [brand.address, 1_500_000n]);
   }
   if ((await rt.chain.public.readContract({ address: d.token, abi: erc20, functionName: "allowance", args: [brand.address, d.permit2!] })) < 2n * PRICE) {
-    await step("brand approves Permit2", brand, d.token, erc20 as Abi, "approve", [d.permit2!, 1_500_000n]); // bounded
+    // forceApprove: HashKey's testnet USDT is classic Tether (approve returns nothing, zero first).
+    await forceApprove(rt.chain.public, (a, req) => step(`brand approves Permit2 (${req.args[1]})`, a, req.address, req.abi as Abi, req.functionName, [...req.args]), brand, d.token, d.permit2!, 1_500_000n); // bounded
   }
 
   // 2. One paid render.

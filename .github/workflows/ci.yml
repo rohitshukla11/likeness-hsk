@@ -25,11 +25,12 @@ jobs:
       - name: Unit, fuzz and both payment rails
         working-directory: contracts
         run: forge test -vv
-      - name: HSK mainnet fork suite (read-only; depends on the public RPC)
+      - name: HSK mainnet and testnet fork suites (read-only; depend on the public RPCs)
         working-directory: contracts
         continue-on-error: true
         env:
           HSK_RPC_URL: https://mainnet.hsk.xyz
+          HSK_TESTNET_RPC_URL: https://testnet.hsk.xyz
         run: forge test --match-path "test/fork/*" -vv
 
   agents:

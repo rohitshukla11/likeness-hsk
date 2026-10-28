@@ -5,13 +5,14 @@ import {HspSettlement, IPermit2Nonces} from "../../src/HspSettlement.sol";
 import {Base} from "./Base.t.sol";
 import {MockPermit2} from "./MockPermit2.sol";
 import {MockUSDC3009} from "./MockUSDC3009.sol";
+import {IUsdtLike} from "./MockClassicUSDT.sol";
 import {MockUSDT} from "./MockUSDT.sol";
 
 /// @dev The HSP payment path end to end, with the HSP Gateway played by an address that executes the
 ///      brand's signed authorization, as the real Gateway does after verifying the Payment Mandate.
 abstract contract HspBase is Base {
     MockUSDC3009 internal usdc;
-    MockUSDT internal usdt;
+    IUsdtLike internal usdt;
     MockPermit2 internal permit2;
     HspSettlement internal settlement;
 
@@ -25,9 +26,14 @@ abstract contract HspBase is Base {
         return HspSettlement.Rail.Eip3009;
     }
 
+    /// @dev The USDT the Permit2 rail runs on; overridden to rerun the suite on a classic Tether token.
+    function _newUsdt() internal virtual returns (IUsdtLike) {
+        return IUsdtLike(address(new MockUSDT()));
+    }
+
     function _deploySettlement() internal override returns (address) {
         usdc = new MockUSDC3009();
-        usdt = new MockUSDT();
+        usdt = _newUsdt();
         permit2 = new MockPermit2();
         HspSettlement.Rail rail = _rail();
         address token = rail == HspSettlement.Rail.Eip3009 ? address(usdc) : address(usdt);

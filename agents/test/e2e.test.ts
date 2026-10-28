@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { parseAbi } from "viem";
 import { CART_MANDATE_KEY } from "../src/a2a/types.js";
 import { sendMessage, userMessage } from "../src/a2a/client.js";
 import { Refused } from "../src/brand-agent/agent.js";
+import { erc20WriteAbi, forceApprove, safeTransfer } from "../src/chain/erc20.js";
 import { webhookSignatureHeader } from "../src/hsp/webhook.js";
 import { ADVERTISING, PRICE, SOCIAL, startDevnet, type Devnet } from "../src/dev/devnet.js";
 
@@ -159,5 +161,40 @@ describe("end to end on the USDT rail (Permit2)", () => {
     const p = await n.brand.waitRecorded(id, 0);
     expect(p.nonceBound).toBe(true);
     expect((await n.balanceOf(n.payout)) - before).toBe(PRICE);
+  });
+});
+
+describe("end to end on a classic-Tether USDT (like HashKey's testnet USDT): approve returns nothing", () => {
+  let n: Devnet;
+  beforeAll(async () => {
+    n = await startDevnet({ rail: "permit2", classicUsdt: true });
+  });
+  afterAll(() => n?.stop());
+
+  it("pays through Permit2 and records with the bound nonce", async () => {
+    const id = await n.brand.license(n.conn, LICENCE);
+    const before = await n.balanceOf(n.payout);
+    await n.brand.payForRender(n.conn, id);
+    const p = await n.brand.waitRecorded(id, 0);
+    expect(p.nonceBound).toBe(true);
+    expect((await n.balanceOf(n.payout)) - before).toBe(PRICE);
+  });
+
+  it("forceApprove changes a non-zero allowance (zero first); a bool-expecting approve fails on this token", async () => {
+    const { brand } = n.accounts;
+    const permit2 = n.chain.d.permit2!;
+    const write = n.chain.write.bind(n.chain);
+    await expect(
+      n.chain.write(brand, { address: n.token, abi: parseAbi(["function approve(address,uint256) returns (bool)"]), functionName: "approve", args: [permit2, 0n] }),
+    ).rejects.toThrow();
+    await forceApprove(n.chain.public, write, brand, n.token, permit2, 1_000_000n);
+    const allowance = () => n.chain.public.readContract({ address: n.token, abi: erc20WriteAbi, functionName: "allowance", args: [brand.address, permit2] });
+    expect(await allowance()).toBe(1_000_000n);
+    await forceApprove(n.chain.public, write, brand, n.token, permit2, 2n ** 256n - 1n);
+    expect(await allowance()).toBe(2n ** 256n - 1n);
+
+    const before = await n.balanceOf(n.payout);
+    await safeTransfer(n.chain.public, write, brand, n.token, n.payout, 1n);
+    expect((await n.balanceOf(n.payout)) - before).toBe(1n);
   });
 });

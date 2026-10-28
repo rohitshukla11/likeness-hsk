@@ -20,6 +20,7 @@ import { listen, serveA2A } from "../a2a/server.js";
 import { BrandAgent, type CreatorConnection } from "../brand-agent/agent.js";
 import type { BrandPolicy } from "../brand-agent/policy.js";
 import { chainOf, creatorRegistryAbi, hspSettlementAbi, licenseRegistryAbi, Likeness, receiptAnchorAbi, type Deployment } from "../chain/contracts.js";
+import { forceApprove } from "../chain/erc20.js";
 import { CreatorAgent } from "../creator-agent/agent.js";
 import { HspClient } from "../hsp/client.js";
 import { HspGatewayEmulator } from "../hsp/emulator.js";
@@ -67,6 +68,8 @@ export interface Devnet {
 
 export interface DevnetOptions {
   rail?: "eip3009" | "permit2";
+  /** On the Permit2 rail, a token that behaves like classic Tether USDT (HashKey's testnet USDT). */
+  classicUsdt?: boolean;
   nonceMode?: "payer" | "gateway";
   policy?: Partial<BrandPolicy>;
   /** Host the creator agent elsewhere (the app server) at this URL; the devnet then serves nothing. */
@@ -130,7 +133,7 @@ export async function startDevnet(opts: DevnetOptions = {}): Promise<Devnet> {
   if (rail === "eip3009") {
     token = await deploy("MockUSDC3009", []);
   } else {
-    token = await deploy("MockUSDT", []);
+    token = await deploy(opts.classicUsdt ? "MockClassicUSDT" : "MockUSDT", []);
     permit2 = await deploy("MockPermit2", []);
   }
   const settlement = await deploy("HspSettlement", [owner, rail === "eip3009" ? 0 : 1, token, permit2 ?? "0x0000000000000000000000000000000000000000", licences, receipts]);
@@ -161,7 +164,7 @@ export async function startDevnet(opts: DevnetOptions = {}): Promise<Devnet> {
 
   // The brand holds the stablecoin (and, on the USDT rail, has made the one-time Permit2 approval).
   await send(accounts.deployer, token, parseAbi(["function mint(address,uint256)"]), "mint", [accounts.brand.address, 10_000_000n]);
-  if (permit2) await send(accounts.brand, token, parseAbi(["function approve(address,uint256) returns (bool)"]), "approve", [permit2, 2n ** 256n - 1n]);
+  if (permit2) await forceApprove(pub, (a, req) => send(a, req.address, req.abi as Abi, req.functionName, [...req.args]), accounts.brand, token, permit2, 2n ** 256n - 1n);
 
   const d: Deployment = {
     chainId,
