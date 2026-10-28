@@ -1,7 +1,7 @@
 import { createDecipheriv, pbkdf2Sync, scryptSync } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { keccak256, toHex, type Hex, type LocalAccount } from "viem";
+import { keccak256, nonceManager, toHex, type Hex, type LocalAccount } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 /**
@@ -41,7 +41,10 @@ export function keychainPassword(service = "likeness-hsk-keystore", account = "l
   }).trimEnd();
 }
 
-/** e.g. loadAccount(".secrets/keystores/brand") */
+/**
+ * e.g. loadAccount(".secrets/keystores/brand"). Nonces are counted locally after the first lookup,
+ * because a public RPC behind a load balancer can briefly report a stale nonce after a receipt.
+ */
 export function loadAccount(path: string, password: string = keychainPassword()): LocalAccount {
-  return privateKeyToAccount(decryptKeystore(readFileSync(path, "utf8"), password));
+  return privateKeyToAccount(decryptKeystore(readFileSync(path, "utf8"), password), { nonceManager });
 }

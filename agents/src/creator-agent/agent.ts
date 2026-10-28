@@ -246,7 +246,11 @@ export class CreatorAgent implements A2AHandler {
     const at = STATES.indexOf(this.c.recordAt ?? "payment-included");
     if (STATES.indexOf(p.status as (typeof STATES)[number]) < at) return;
     const key = p.cart_mandate_id;
-    if (!this.settling.has(key)) this.settling.set(key, this.settle(p.cart_mandate_id, p.payment_request_id, p.tx_signature as Hex));
+    if (!this.settling.has(key)) {
+      const run = this.settle(p.cart_mandate_id, p.payment_request_id, p.tx_signature as Hex);
+      this.settling.set(key, run);
+      run.catch(() => this.settling.delete(key)); // a later webhook or poll may retry
+    }
     return this.settling.get(key);
   }
 
@@ -262,6 +266,7 @@ export class CreatorAgent implements A2AHandler {
     const payout = await ch.payoutOf(l.creator);
     const receipt = await ch.public.getTransactionReceipt({ hash: txHash });
     if (receipt.status !== "success") throw new Error(`HSP transaction ${txHash} reverted`);
+    await this.atLeastBlock(receipt.blockNumber);
 
     // What the creator's payout actually received from the licensee in this transaction.
     let received = 0n;
@@ -288,12 +293,23 @@ export class CreatorAgent implements A2AHandler {
       received,
     });
 
-    const r = await ch.write(this.c.account, {
-      address: ch.d.settlement,
-      abi: hspSettlementAbi,
-      functionName: "recordPayment",
-      args: [licenceId, renderIndex, nonce, l.pricePerRender, txHash, keccak256(toBytes(paymentRequestId))],
-    });
+    // A load-balanced RPC can answer the simulation from a node a block behind the payment; the
+    // contract's own check (PaymentNotExecuted) is then retried, never skipped.
+    let r: Awaited<ReturnType<typeof ch.write>> | undefined;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        r = await ch.write(this.c.account, {
+          address: ch.d.settlement,
+          abi: hspSettlementAbi,
+          functionName: "recordPayment",
+          args: [licenceId, renderIndex, nonce, l.pricePerRender, txHash, keccak256(toBytes(paymentRequestId))],
+        });
+        break;
+      } catch (e) {
+        if (attempt >= 6 || !String((e as Error).message).includes("PaymentNotExecuted")) throw e;
+        await new Promise((res) => setTimeout(res, 1500));
+      }
+    }
     this.c.log.add("chain", "tx", `recordPayment(licence ${licenceId}, render ${renderIndex})`, { tx: r.transactionHash, block: r.blockNumber });
     return ch.payment(licenceId, renderIndex);
   }
@@ -327,6 +343,12 @@ export class CreatorAgent implements A2AHandler {
   }
 
   // ---------------------------------------------------------------- helpers
+
+  private async atLeastBlock(block: bigint) {
+    for (let i = 0; i < 40 && (await this.c.chain.public.getBlockNumber({ cacheTime: 0 })) < block; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
 
   private refuse(message: Message, reason: string): Task {
     this.c.log.add("creator-agent", "refused", reason);

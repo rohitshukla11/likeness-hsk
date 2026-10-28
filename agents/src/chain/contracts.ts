@@ -118,6 +118,10 @@ export class Likeness {
     const hash = await this.wallet(account).writeContract(request as never);
     const receipt = await this.public.waitForTransactionReceipt({ hash });
     if (receipt.status !== "success") throw new Error(`transaction reverted: ${hash}`);
+    // Read-after-write: don't let a lagging RPC node answer the next read from an older block.
+    for (let i = 0; i < 20 && (await this.public.getBlockNumber({ cacheTime: 0 })) < receipt.blockNumber; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
     return receipt;
   }
 }
