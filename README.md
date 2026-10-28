@@ -1,5 +1,7 @@
 # Likeness on HSK Chain
 
+[![CI](https://github.com/rohitshukla11/likeness-hsk/actions/workflows/ci.yml/badge.svg)](https://github.com/rohitshukla11/likeness-hsk/actions/workflows/ci.yml)
+
 **Agent-to-agent licensing and per-render payments for AI ads that use a real person's face, paid
 through HSP on HSK Chain, with consent enforced before any money moves.**
 
