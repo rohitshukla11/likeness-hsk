@@ -46,7 +46,7 @@
       </div>
     </main>
     <script type="module">
-      import { api, header, esc, txLink, addrLink, startLog, saveBlob, timeline } from "/static/app.js";
+      import { api, header, esc, txLink, addrLink, startLog, saveBlob, timeline, AGENTIC_STEPS } from "/static/app.js";
       const s = await api("/api/state");
       header("/brand", s);
       startLog(document.querySelector("#log"));
@@ -121,32 +121,84 @@
           await refresh();
         }
       };
+      // Paying runs as a job on the server: this page polls it, shows the approvals and HSP's statuses.
+      const STATES = ["payment-submitted", "payment-verified", "payment-processing", "payment-included", "payment-safe", "payment-finalized"];
+      const raw = (r, d) => { const v = BigInt(r), p = 10n ** BigInt(d); return `${v / p}.${(v % p).toString().padStart(d, "0")}`; };
+      const approvalPanel = (a) => `<div class="result"><b>${a.stage === "sign" ? "Approve signing this payment?" : "Approve submitting this signed payment?"}</b>
+        <dl>${row("recipient (pay_to)", addrLink(s, a.payTo))}${row("payer", addrLink(s, a.payer))}${row("token_total_raw", `<span class="mono">${esc(a.tokenTotalRaw)}</span> raw units (≈ ${esc(raw(a.tokenTotalRaw, a.token.decimals))} ${esc(a.token.symbol)}, ${a.token.decimals} decimals)`)}${row("token", `<span class="mono">${esc(a.token.address)}</span>`)}${row("network fee", a.gasFeeAdvanced === true ? "advanced by the platform, not in the total" : a.gasFeeAdvanced === false ? "included in the total" : "not stated")}${row("quote expires", esc(new Date(a.quoteExpiresAt).toLocaleTimeString()))}</dl>
+        <p class="note">${a.stage === "sign" ? "The brand wallet will sign exactly the authorization HSP returned. Nothing is sent yet." : "HSP will broadcast the payment. The amount above is an authorization, not funds received."}</p>
+        <p><button data-approve="${esc(a.id)}">${a.stage === "sign" ? "Approve and sign" : "Approve and submit"}</button> <button class="ghost" data-cancel="${esc(a.id)}">Cancel</button></p></div>`;
+      // HSP's states are sequential: a state before the furthest one seen was passed between two polls.
+      // payment-required is the order's state before anything was submitted, so it isn't listed.
+      const statusList = (r) => {
+        const seen = new Set(r.statuses.map((x) => x.status));
+        const furthest = Math.max(-1, ...STATES.map((st, i) => (seen.has(st) ? i : -1)));
+        const off = r.statuses.filter((x) => !STATES.includes(x.status) && x.status !== "payment-required").map((x) => `<li class="done"><div class="t">${esc(x.status)}</div><div class="note">${esc(x.summary)}</div></li>`);
+        return `<ol class="steps">${STATES.map((st, i) => `<li class="${i <= furthest ? "done" : ""}"><div class="t">${esc(st)}</div>${i < furthest && !seen.has(st) ? `<div class="note">passed between two polls</div>` : ""}</li>`).join("")}${off.join("")}</ol>`;
+      };
+      const renderJob = (r) => {
+        const j = r.job;
+        const last = r.statuses.at(-1);
+        const head = {
+          paying: r.approvals.length ? "Waiting for your approval." : "Working with HSP…",
+          submitted: "Submitted to HSP. Following its status (every 15 s).",
+          recorded: "Paid and recorded on chain. Rendering…",
+          delivered: `Render ${j.renderIndex} of licence ${esc(j.licenceId)}: paid, recorded and delivered.`,
+          "paid-not-recorded": "Paid through HSP.",
+          refused: `Refused: ${esc(j.error)}`,
+          failed: `Failed: ${esc(j.error)}`,
+        }[j.state];
+        const facts = j.flowId
+          ? `<dl>${row("flow_id", `<span class="mono">${esc(j.flowId)}</span>`)}${row("payment_request_id", `<span class="mono">${esc(j.paymentRequestId)}</span>`)}${j.tokenTotalRaw ? row("raw authorization amount", `<span class="mono">${esc(j.tokenTotalRaw)}</span> raw units`) : ""}${row("transaction", r.tx ? txLink(s, r.tx) : "not broadcast yet")}${row("team attribution", r.attribution === true ? `verified (merchant_name ${esc(s.agentic?.merchantName ?? "Likeness")})` : r.attribution === false ? "NOT verified" : "not reported yet")}${last?.status === "payment-safe" || last?.status === "payment-finalized" ? row("status", esc(last.summary)) : ""}</dl>`
+          : "";
+        stepsEl.innerHTML = `<p class="${j.state === "refused" || j.state === "failed" ? "err" : ""}">${head}</p>${r.approvals.map(approvalPanel).join("")}${facts}${j.flowId && s.agentic ? statusList(r) : ""}${j.note ? `<p class="note">${esc(j.note)}</p>` : ""}`;
+      };
+      stepsEl.addEventListener("click", async (ev) => {
+        const id = ev.target?.dataset?.approve ?? ev.target?.dataset?.cancel;
+        if (!id) return;
+        ev.target.disabled = true;
+        try {
+          await api("/api/brand/approve", { id, decision: ev.target.dataset.approve ? "approve" : "cancel" });
+        } catch (e) {
+          alert(e.message);
+        }
+      });
       document.querySelector("#licences").addEventListener("click", (ev) => {
         const id = ev.target?.dataset?.pay;
         if (!id) return;
         busy(ev.target, async () => {
           stepsEl.hidden = false;
           logEl.hidden = true;
-          stepsEl.innerHTML = `<p class="note">Paying through the HSP Gateway… (about 10–30 s on testnet)</p>`;
+          stepsEl.innerHTML = `<p class="note">Starting the payment…</p>`;
+          const start = await api("/api/brand/pay", { licenceId: id, brief: "spring campaign hero shot" });
           let r;
-          try {
-            r = await api("/api/brand/pay", { licenceId: id, brief: "spring campaign hero shot" });
-          } catch (e) {
-            stepsEl.innerHTML = `<div class="result err">Refused: ${esc(e.message)}</div><p class="note">Nothing was signed and no money moved.</p>`;
-            throw e;
+          for (;;) {
+            r = await api(`/api/brand/job?id=${start.jobId}`);
+            renderJob(r);
+            if (["delivered", "paid-not-recorded", "refused", "failed"].includes(r.job.state)) break;
+            await new Promise((res) => setTimeout(res, 1000));
           }
-          const events = (await api(`/api/log?since=${r.fromSeq}`)).filter((e) => e.seq <= r.toSeq);
-          stepsEl.innerHTML = `<p>Render ${r.renderIndex} of licence ${esc(r.licenceId)}: paid, recorded and delivered.</p>${timeline(s, events)}`;
+          const events = (await api(`/api/log?since=${start.fromSeq}`)).filter((e) => e.seq <= r.toSeq);
+          stepsEl.insertAdjacentHTML("beforeend", timeline(s, events, s.agentic ? AGENTIC_STEPS : undefined));
+          const j = r.job;
+          if (j.state === "refused" || j.state === "failed") {
+            result.innerHTML = `<div class="result err">${esc(j.error)}</div>`;
+            return;
+          }
+          if (j.state === "paid-not-recorded") {
+            result.innerHTML = `<div class="result">HSP payment ${txLink(s, r.tx)} · ${esc(j.note)}</div>`;
+            return;
+          }
           result.innerHTML = `<div class="result">
-            <div>HSP payment ${txLink(s, r.hspTx)} · receipt ${txLink(s, r.anchorTx)} · nonce ${r.nonceBound ? "bound to this render" : "assigned by the Gateway"}</div>
-            <div class="mono">sha256 ${esc(r.assetHash)}</div>
+            <div>HSP payment ${txLink(s, j.hspTx ?? r.tx)} · receipt ${txLink(s, j.anchorTx)} · nonce ${j.nonceBound ? "bound to this render" : "assigned by the Gateway"}</div>
+            <div class="mono">sha256 ${esc(j.assetHash)}</div>
             <p><button class="ghost" id="dl">Download (signed by the brand wallet)</button></p></div>`;
           document.querySelector("#dl").onclick = async () => {
-            const claim = await api("/api/brand/download", { assetHash: r.assetHash });
-            const res = await fetch(`/api/renders/${r.assetHash}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(claim) });
+            const claim = await api("/api/brand/download", { assetHash: j.assetHash });
+            const res = await fetch(`/api/renders/${j.assetHash}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(claim) });
             if (!res.ok) return alert((await res.json()).error);
             const blob = await res.blob();
-            saveBlob(blob, `likeness-render-${r.licenceId}-${r.renderIndex}${blob.type === "image/svg+xml" ? ".svg" : ".png"}`);
+            saveBlob(blob, `likeness-render-${j.licenceId}-${j.renderIndex}${blob.type === "image/svg+xml" ? ".svg" : ".png"}`);
           };
         });
       });

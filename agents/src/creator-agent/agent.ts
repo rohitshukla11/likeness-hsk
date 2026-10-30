@@ -14,6 +14,9 @@ import { AP2_EXTENSION, A2A_PROTOCOL_VERSION, CART_MANDATE_KEY, dataOf, type Age
 import { sendJson, type A2AHandler } from "../a2a/server.js";
 import { hspSettlementAbi, type Likeness } from "../chain/contracts.js";
 import { buildCartContents, signCart, usdValue } from "../hsp/cart.js";
+import { type HspAgentic, MERCHANT_NAME } from "../hsp/agentic/client.js";
+import type { PaymentOption } from "../hsp/agentic/chainConfig.js";
+import { watchPayment } from "../hsp/agentic/payer.js";
 import type { HspClient } from "../hsp/client.js";
 import { PERMIT2 } from "../hsp/payment.js";
 import { verifyWebhook, type PaymentWebhook } from "../hsp/webhook.js";
@@ -45,6 +48,11 @@ export interface CreatorAgentConfig {
   /** Earliest HSP state at which a payment is recorded on chain. */
   recordAt?: "payment-included" | "payment-safe" | "payment-finalized";
   cartTtlSeconds?: number;
+  /**
+   * HSP Agentic Payment (MCP): orders are created with create_order and followed with query_payment;
+   * no merchant key or webhook. `option` is the network and token chosen from get_chain_config.
+   */
+  agentic?: { hsp: HspAgentic; option: PaymentOption; pollMs?: number };
 }
 
 /** cart_mandate_id carries the render it is for, so a webhook can be settled after a restart. */
@@ -62,6 +70,8 @@ const STATES = ["payment-included", "payment-safe", "payment-finalized"] as cons
 
 export class CreatorAgent implements A2AHandler {
   private readonly settling = new Map<string, Promise<unknown>>();
+  /** The nonce the brand's agent signed, per flow_id (HSP chose it); checked on chain before use. */
+  private readonly nonceHints = new Map<string, Hex>();
 
   constructor(private readonly c: CreatorAgentConfig) {}
 
@@ -131,6 +141,7 @@ export class CreatorAgent implements A2AHandler {
     let task: Task;
     try {
       if (data.skill === SKILL_TERMS) task = await this.terms(message);
+      else if (data.skill === SKILL_RENDER_PAYMENT && data.submitted) task = this.noteSubmitted(message, String(data.flow_id ?? ""), String(data.nonce ?? ""));
       else if (data.skill === SKILL_RENDER_PAYMENT) task = await this.quoteRender(message, BigInt(String(data.licenceId)));
       else task = this.task(message, "rejected", `unknown skill ${String(data.skill)}`);
     } catch (e) {
@@ -176,6 +187,7 @@ export class CreatorAgent implements A2AHandler {
 
     const renderIndex = l.renderCount;
     const payout = await ch.payoutOf(this.c.creator);
+    if (this.c.agentic) return this.quoteAgentic(message, licenceId, renderIndex, payout, l.pricePerRender, l.renderCap);
     const contents = buildCartContents({
       cartId: cartIdFor(ch.d.chainId, licenceId, renderIndex),
       paymentRequestId: `PR-${randomUUID()}`,
@@ -209,6 +221,65 @@ export class CreatorAgent implements A2AHandler {
         },
       },
     ]);
+  }
+
+  /**
+   * HSP Agentic Payment: create_order with the cart from the licence terms (amount in USD, x402 v2,
+   * network and token from get_chain_config), our team name, and the creator's on-chain payout as
+   * pay_to; then follow the payment with query_payment and record it on chain once it is safe.
+   */
+  private async quoteAgentic(message: Message, licenceId: bigint, renderIndex: number, payout: Address, price: bigint, cap: number): Promise<Task> {
+    const { hsp, option } = this.c.agentic!;
+    const ch = this.c.chain;
+    const contents = buildCartContents({
+      cartId: cartIdFor(ch.d.chainId, licenceId, renderIndex),
+      paymentRequestId: `PR-${randomUUID()}`,
+      merchantName: MERCHANT_NAME,
+      network: option.network,
+      chainId: option.chainId,
+      token: option.token.address,
+      coin: option.token.symbol,
+      payTo: payout,
+      priceUnits: price,
+      itemLabel: `Likeness render ${renderIndex + 1} of ${cap}, licence ${licenceId}`,
+      expiresAt: new Date(Date.now() + (this.c.cartTtlSeconds ?? 900) * 1000),
+    });
+    this.c.log.add("creator-agent", "hsp.request", `create_order: ${contents.payment_request.details.total.amount.value} USD to ${payout}`, { merchant_name: MERCHANT_NAME, pay_to: payout, cart_mandate: { contents } });
+    const order = await hsp.createOrder({ merchant_name: MERCHANT_NAME, pay_to: payout, cart_mandate: { contents } });
+    this.c.log.add("hsp-gateway", "hsp.response", "order created", order);
+    void this.followAgentic(order.flow_id, order.payment_request_id, contents.id);
+    return this.task(message, "completed", `pay ${contents.payment_request.details.total.amount.value} USD for render ${renderIndex} of licence ${licenceId}`, [
+      {
+        hsp: { flow_id: order.flow_id, payment_request_id: order.payment_request_id, payment_url: order.payment_url ?? "" },
+        likeness: { licenceId: licenceId.toString(), renderIndex, settlement: ch.d.settlement, chainId: ch.d.chainId, merchantName: MERCHANT_NAME },
+      },
+    ]);
+  }
+
+  /** The brand's agent tells us the nonce it signed (HSP chose it), for reading Permit2 payments. */
+  private noteSubmitted(message: Message, flowId: string, nonce: string): Task {
+    if (!flowId || !/^0x[0-9a-fA-F]{64}$/.test(nonce)) return this.task(message, "rejected", "submitted: needs flow_id and a 32-byte nonce");
+    this.nonceHints.set(flowId, nonce as Hex);
+    return this.task(message, "completed", "noted");
+  }
+
+  /** query_payment until safe/finalized/failed; then record on chain, if the token is the one our contracts use. */
+  private async followAgentic(flowId: string, paymentRequestId: string, cartId: string) {
+    const { hsp, option, pollMs } = this.c.agentic!;
+    try {
+      const end = await watchPayment(hsp, { flow_id: flowId, payment_request_id: paymentRequestId }, (w) => this.c.log.add("hsp-gateway", "hsp.status", `${w.status}${w.note ? `: ${w.note}` : ""}`, { flow_id: flowId, payment_request_id: paymentRequestId, attribution_verified: w.query.attribution_verified, payment: w.query.payment }), {
+        intervalMs: pollMs,
+      });
+      const tx = end.query.payment?.tx_signature;
+      if (end.status === "payment-failed" || !tx) return;
+      if (option.token.address.toLowerCase() !== this.c.chain.d.token.toLowerCase()) {
+        this.c.log.add("creator-agent", "info", `not recorded on chain: HSP paid in ${option.token.symbol} ${option.token.address}, but HspSettlement is deployed for ${this.c.chain.d.token} (redeploy pending)`, { flow_id: flowId, tx });
+        return;
+      }
+      await this.settle(cartId, paymentRequestId, tx as Hex, this.nonceHints.get(flowId));
+    } catch (e) {
+      this.c.log.add("creator-agent", "info", `following ${flowId}: ${(e as Error).message}`);
+    }
   }
 
   // ---------------------------------------------------------------- HSP webhook → on-chain record
@@ -271,7 +342,7 @@ export class CreatorAgent implements A2AHandler {
     return this.settling.get(key);
   }
 
-  private async settle(cartId: string, paymentRequestId: string, txHash: Hex) {
+  private async settle(cartId: string, paymentRequestId: string, txHash: Hex, nonceHint?: Hex) {
     const ch = this.c.chain;
     const { chainId, licenceId, renderIndex } = parseCartId(cartId);
     if (chainId !== ch.d.chainId) throw new Error(`cart is for chain ${chainId}`);
@@ -301,7 +372,7 @@ export class CreatorAgent implements A2AHandler {
     if (received < l.pricePerRender) {
       throw new Error(`payout received ${received}, price is ${l.pricePerRender} (tx ${txHash})`);
     }
-    const nonce = await this.executedNonce(l.licensee, licenceId, renderIndex, nonces, txHash);
+    const nonce = await this.executedNonce(l.licensee, licenceId, renderIndex, nonces, txHash, nonceHint);
     const bound = nonce === (await ch.paymentNonce(licenceId, renderIndex));
     this.c.log.add("creator-agent", "info", `verified ${usdValue(received)} ${ch.d.tokenSymbol} to the payout in ${txHash}; nonce ${bound ? "bound to this render" : "chosen by the HSP Gateway"}`, {
       licenceId,
@@ -336,7 +407,7 @@ export class CreatorAgent implements A2AHandler {
    * AuthorizationUsed event (EIP-3009), or for Permit2 the bound nonce if its bit is set, else the
    * nonce in the permitTransferFrom call.
    */
-  private async executedNonce(licensee: Address, licenceId: bigint, renderIndex: number, fromEvents: Hex[], txHash: Hex): Promise<Hex> {
+  private async executedNonce(licensee: Address, licenceId: bigint, renderIndex: number, fromEvents: Hex[], txHash: Hex, hint?: Hex): Promise<Hex> {
     const ch = this.c.chain;
     const bound = await ch.paymentNonce(licenceId, renderIndex);
     if (ch.d.rail === "eip3009") {
@@ -355,6 +426,12 @@ export class CreatorAgent implements A2AHandler {
       }
     } catch {
       /* the Gateway did not call Permit2 directly */
+    }
+    // The nonce the brand's agent signed: used only if Permit2 shows it spent (the contract checks again).
+    if (hint) {
+      const h = BigInt(hint);
+      const w = await ch.public.readContract({ address: permit2, abi: permit2Abi, functionName: "nonceBitmap", args: [licensee, h >> 8n] });
+      if ((w >> (h & 0xffn)) & 1n) return hint;
     }
     throw new Error(`cannot read the Permit2 nonce from ${txHash}; HSP metadata needed`);
   }

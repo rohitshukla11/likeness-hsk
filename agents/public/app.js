@@ -24,12 +24,14 @@ const NETWORK = { 133: "HSK Chain testnet (133)", 177: "HSK Chain mainnet (177)"
 /** Header, plus a banner that says plainly which chain and which HSP Gateway this server uses. */
 export function header(active, state) {
   const links = [["/", "Overview"], ["/brand", "Brand console"], ["/creator", "Creator"], ["/verify", "Verify"], ["/agent", "Agent card"]];
-  const gw =
-    state?.gateway === "hsp"
-      ? `HSP Gateway: HashKey (live merchant credentials)`
-      : `HSP Gateway: emulated until merchant credentials are issued`;
+  const gw = {
+    hsp: "HSP Gateway: HashKey (live merchant credentials)",
+    "hsp-agentic-qa": "HSP Agentic Payment: HashKey QA (MCP)",
+    "hsp-agentic-emulator": "HSP Agentic Payment: offline emulator (MCP)",
+  }[state?.gateway] ?? "HSP Gateway: emulated until merchant credentials are issued";
+  const live = state?.gateway === "hsp" || state?.gateway === "hsp-agentic-qa";
   const banner = state
-    ? `<div class="banner ${state.gateway === "hsp" ? "live" : ""}"><span>${esc(NETWORK[state.chainId] ?? `chain ${state.chainId}`)}</span><span>${esc(gw)}</span><span>renders: ${state.renderer === "gemini" ? "Gemini" : "marked TEST RENDER"}</span></div>`
+    ? `<div class="banner ${live ? "live" : ""}"><span>${esc(NETWORK[state.chainId] ?? `chain ${state.chainId}`)}</span><span>${esc(gw)}</span><span>renders: ${state.renderer === "gemini" ? "Gemini" : "marked TEST RENDER"}</span></div>`
     : "";
   document.body.insertAdjacentHTML(
     "afterbegin",
@@ -51,10 +53,25 @@ export const STEPS = [
   { id: "receipt", title: "Receipt anchored", who: "render agent → ReceiptAnchor", match: (e) => e.kind === "tx" && /receipt anchored/.test(e.summary), tx: (e) => e.data?.tx },
 ];
 
-export function timeline(state, events) {
-  return `<ol class="steps">${STEPS.map((s) => {
+/** The same render with HSP Agentic Payment (MCP): HSP builds the eip712 and the JWT; the brand approves twice. */
+export const AGENTIC_STEPS = [
+  STEPS[0],
+  { id: "order", title: "HSP order (create_order)", who: "creator agent → HSP, merchant_name Likeness, pay_to the creator's payout", match: (e) => e.actor === "creator-agent" && e.kind === "hsp.request" && /create_order/.test(e.summary) },
+  { id: "policy", title: "Policy check", who: "brand agent: order, payee, price, budget, licence active", match: (e) => e.actor === "brand-agent" && e.kind === "policy" && /order accepted/.test(e.summary) },
+  { id: "quote", title: "Quote locked (prepare_payment)", who: "HSP builds the eip712; 5-minute quote", match: (e) => e.kind === "hsp.response" && /quote locked/.test(e.summary) },
+  { id: "approve-sign", title: "Approved for signing", who: "you, in this console", match: (e) => e.kind === "approval" && /signing approved/.test(e.summary) },
+  { id: "signed", title: "Signed (EIP-712)", who: "brand wallet signs exactly the returned eip712", match: (e) => e.kind === "payment-mandate" && /EIP-712/.test(e.summary) },
+  { id: "approve-submit", title: "Approved for submission", who: "you, in this console", match: (e) => e.kind === "approval" && /submission approved/.test(e.summary) },
+  { id: "submitted", title: "Submitted (submit_payment)", who: "payment_mandate_json from finalize_payment, unchanged", match: (e) => e.kind === "hsp.response" && /^submitted/.test(e.summary) },
+  { id: "status", title: "HSP status (query_payment)", who: "every 15 s: submitted → … → safe → finalized", match: (e) => e.kind === "hsp.status", tx: (e) => e.data?.payment?.tx_signature, last: true },
+  STEPS[8],
+  STEPS[9],
+];
+
+export function timeline(state, events, steps = STEPS) {
+  return `<ol class="steps">${steps.map((s) => {
     const hits = events.filter(s.match);
-    const e = hits[0];
+    const e = s.last ? hits.at(-1) : hits[0];
     const tx = e && s.tx ? s.tx(e) : null;
     return `<li class="${e ? "done" : ""}"><div class="t">${esc(s.title)}${hits.length > 1 ? ` <span class="note">×${hits.length}</span>` : ""}</div><div class="note">${esc(s.who)}</div>${
       e ? `<div class="sum">${esc(e.summary)} ${tx ? txLink(state, tx) : ""}</div>` : ""

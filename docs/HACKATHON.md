@@ -166,3 +166,22 @@ the testnet deployment keeps TestUSDT, and the code is ready for the real token:
 Still to come, recorded here as it lands: the real HSP Gateway (once credentials arrive). The
 organisers announced that testnet is the submission and winners deploy to mainnet afterwards, so the
 mainnet runbook runs only if Likeness is selected.
+
+## 30 October: HSP Agentic Payment (MCP)
+
+Written new for this project, after HashKey published its HSP Agentic Payment guide (QA, rev 2026-10-30):
+
+- `agents/src/hsp/agentic/client.ts`: the MCP client (official SDK, Streamable HTTP or in-memory), the
+  eight-tool check, live-schema checks on every call, and the allowlisting guard.
+- `agents/src/hsp/agentic/payer.ts`: prepare → approval → sign the returned eip712 → finalize → approval →
+  submit, the quote rules (5 minutes, 30043), and `query_payment` every 15 s with the guide's wording.
+- `agents/src/hsp/agentic/chainConfig.ts`: the network and token only from `get_chain_config`.
+- `agents/src/hsp/agentic/emulator.ts`: the offline mode, an MCP server with the same eight tools.
+- `agents/src/app/approvals.ts`, `agents/src/app/jobs.ts`: the brand console's two approvals and
+  background payment jobs; `agents/scripts/hsp-agentic.ts`: health, tools, chain config, manual commands.
+- Changed: both agents (an agentic mode beside the merchant-API one), the devnet, the app runtime,
+  server and brand console, and their tests (`agents/test/hsp-agentic.test.ts`, `agents/test/app.test.ts`).
+- `agents/src/hsp/agentic/schemaDiff.ts` and the client's name mapping: adapts to clearly equivalent live
+  field names, stops on anything ambiguous; `agents/src/hsp/agentic/terminal.ts`: the two approvals in
+  `pnpm run testnet`; `pnpm run deploy -- --hsp-token`: the prepared redeploy for HSP's token;
+  [docs/HSP_LIVE_RUN.md](HSP_LIVE_RUN.md): the live-run checklist.

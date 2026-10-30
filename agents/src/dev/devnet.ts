@@ -24,6 +24,10 @@ import { forceApprove } from "../chain/erc20.js";
 import { CreatorAgent } from "../creator-agent/agent.js";
 import { HspClient } from "../hsp/client.js";
 import { HspGatewayEmulator } from "../hsp/emulator.js";
+import type { HspAgentic } from "../hsp/agentic/client.js";
+import { chooseOption, type PaymentOption } from "../hsp/agentic/chainConfig.js";
+import { HspAgenticEmulator } from "../hsp/agentic/emulator.js";
+import type { Approver } from "../hsp/agentic/payer.js";
 import { MessageLog } from "../log.js";
 import { RenderAgent } from "../render/renderAgent.js";
 import { foundryBin } from "./foundry.js";
@@ -64,6 +68,8 @@ export interface Devnet {
   connect(): Promise<CreatorConnection>;
   revoke(licenceId: bigint): Promise<void>;
   stop(): void;
+  /** With `hsp: "agentic"`: the HSP Agentic Payment emulator (MCP) and the client the agents use. */
+  agentic?: { emulator: HspAgenticEmulator; hsp: HspAgentic; option: PaymentOption };
 }
 
 export interface DevnetOptions {
@@ -74,6 +80,12 @@ export interface DevnetOptions {
   policy?: Partial<BrandPolicy>;
   /** Host the creator agent elsewhere (the app server) at this URL; the devnet then serves nothing. */
   publicUrl?: string;
+  /** "agentic": HSP Agentic Payment over MCP (offline emulator); default: the HSP merchant REST API emulator. */
+  hsp?: "rest" | "agentic";
+  /** The user's approvals before signing and before submitting (agentic). Default: approve. */
+  approve?: Approver;
+  /** The emulator's quote lifetime in seconds (agentic). Default 300, as HSP. */
+  quoteSeconds?: number;
 }
 
 /** A local chain with the real contracts, a mock stablecoin, the HSP Gateway emulator and the agents. */
@@ -193,6 +205,26 @@ export async function startDevnet(opts: DevnetOptions = {}): Promise<Devnet> {
   const creatorAgentUrl = opts.publicUrl ?? `http://127.0.0.1:${agentPort}`;
   emulator.registerMerchant({ ...creds, merchantPublicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(), webhookUrl: `${creatorAgentUrl}/hsp/webhook` });
 
+  // HSP Agentic Payment: the MCP emulator; the agents use the network and token from its get_chain_config.
+  let agentic: Devnet["agentic"];
+  if (opts.hsp === "agentic") {
+    const em = new HspAgenticEmulator({
+      chain: chain.chain,
+      rpcUrl,
+      publicClient: pub,
+      executor: accounts.executor,
+      network: d.hspNetwork,
+      token: { address: token, decimals: 6, symbol: d.tokenSymbol, protocol: rail, name: d.tokenDomain.name, version: d.tokenDomain.version },
+      permit2,
+      quoteSeconds: opts.quoteSeconds,
+      stepDelayMs: 20,
+    });
+    const hsp = await em.client();
+    agentic = { emulator: em, hsp, option: chooseOption(await hsp.getChainConfig()) };
+  }
+  const option = agentic?.option;
+  const balance = (t: Address, who: Address) => pub.readContract({ address: t, abi: parseAbi(["function balanceOf(address) view returns (uint256)"]), functionName: "balanceOf", args: [who] });
+
   const creatorAgent = new CreatorAgent({
     creator: accounts.creator.address,
     account: accounts.creatorAgent,
@@ -203,6 +235,7 @@ export async function startDevnet(opts: DevnetOptions = {}): Promise<Devnet> {
     merchantName: "Ana Reyes (synthetic demo creator)",
     publicUrl: creatorAgentUrl,
     log,
+    ...(agentic && option ? { agentic: { hsp: agentic.hsp, option, pollMs: 50 } } : {}),
   });
   const server = opts.publicUrl ? undefined : serveA2A(creatorAgent);
   if (server) await listen(server, agentPort);
@@ -214,6 +247,7 @@ export async function startDevnet(opts: DevnetOptions = {}): Promise<Devnet> {
     policy: { maxPricePerRender: 100_000n, allowedCategories: ADVERTISING, dailyBudget: 1_000_000n, maxRendersPerLicence: 5, ...opts.policy },
     log,
     permit2Spender: accounts.executor.address,
+    ...(agentic && option ? { agentic: { hsp: agentic.hsp, option, approve: opts.approve ?? (async () => true), balanceOf: balance } } : {}),
   });
   // When the app hosts the agent, it connects once it is listening (Devnet.connect).
   const conn = server ? await brand.connect(creatorAgentUrl) : (undefined as unknown as CreatorConnection);
@@ -234,9 +268,11 @@ export async function startDevnet(opts: DevnetOptions = {}): Promise<Devnet> {
     token,
     balanceOf: (who) => pub.readContract({ address: token, abi: parseAbi(["function balanceOf(address) view returns (uint256)"]), functionName: "balanceOf", args: [who] }),
     revoke: (id) => send(accounts.creator, licences, licenseRegistryAbi as Abi, "revoke", [id]),
+    agentic,
     stop: () => {
       server?.close();
       emulator.stop();
+      void agentic?.hsp.close();
       anvil.kill();
     },
   };

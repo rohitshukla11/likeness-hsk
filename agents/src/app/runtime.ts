@@ -1,6 +1,6 @@
 import { createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, type KeyObject } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { createPublicClient, http, parseAbiItem, type Address, type Hex, type LocalAccount, type PublicClient } from "viem";
+import { createPublicClient, http, parseAbi, parseAbiItem, type Address, type Hex, type LocalAccount, type PublicClient } from "viem";
 import { BrandAgent, type CreatorConnection } from "../brand-agent/agent.js";
 import { chainOf, licenseRegistryAbi, Likeness, type Deployment } from "../chain/contracts.js";
 import { CreatorAgent } from "../creator-agent/agent.js";
@@ -9,6 +9,11 @@ import { HspClient } from "../hsp/client.js";
 import { loadHspConfig } from "../hsp/config.js";
 import { deploymentsDir, rpcFor } from "../chain/networks.js";
 import { HspGatewayEmulator } from "../hsp/emulator.js";
+import { HspAgentic } from "../hsp/agentic/client.js";
+import { chooseOption, type PaymentOption } from "../hsp/agentic/chainConfig.js";
+import { HspAgenticEmulator } from "../hsp/agentic/emulator.js";
+import { ApprovalDesk } from "./approvals.js";
+import type { Approver } from "../hsp/agentic/payer.js";
 import { keychainPassword, loadAccount } from "../keys.js";
 import { MessageLog } from "../log.js";
 import { geminiRenderer } from "../render/gemini.js";
@@ -20,7 +25,12 @@ export type Mode = "local" | "testnet" | "mainnet";
 export interface Runtime {
   mode: Mode;
   operator: boolean; // may this server act for the brand and the creator (license, pay, revoke)?
-  gateway: "hsp" | "emulator";
+  gateway: "hsp" | "emulator" | "hsp-agentic-qa" | "hsp-agentic-emulator";
+  /** HSP Agentic Payment (LIKENESS_HSP=agentic): the network and token from get_chain_config, and whether
+   *  HspSettlement can record payments in that token (same chain and token as the deployment). */
+  agentic?: { source: "hashkey-qa" | "emulator"; option: PaymentOption; recordable: boolean };
+  /** The brand console's approvals before signing and before submitting (agentic). */
+  approvals: ApprovalDesk;
   renderer: "gemini" | "test";
   chain: Likeness;
   log: MessageLog;
@@ -61,16 +71,22 @@ const POLICY = { maxPricePerRender: 100_000n, allowedCategories: ADVERTISING, da
  * when .secrets/hsp/credentials.json exists; otherwise testnet uses the local emulator and mainnet
  * refuses to pay (the emulator never stands in for HSP on mainnet).
  */
-export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: string; operator: boolean }): Promise<Runtime> {
+export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: string; operator: boolean; approve?: Approver }): Promise<Runtime> {
   const store = new RenderStore(`${opts.root}renders`);
   const r = pickRenderer();
+  const approvals = new ApprovalDesk();
+  // The brand console's approvals by default; the command-line run asks in the terminal instead.
+  const approve = opts.approve ?? approvals.ask;
+  const agenticMode = process.env.LIKENESS_HSP === "agentic";
   if (opts.mode === "local") {
-    const n = await startDevnet({ rail: "permit2", publicUrl: opts.publicUrl });
+    const n = await startDevnet({ rail: "permit2", publicUrl: opts.publicUrl, ...(agenticMode ? { hsp: "agentic" as const, approve } : {}) });
     let conn: CreatorConnection | undefined;
     return {
       mode: "local",
       operator: opts.operator,
-      gateway: "emulator",
+      gateway: n.agentic ? "hsp-agentic-emulator" : "emulator",
+      approvals,
+      ...(n.agentic ? { agentic: { source: "emulator" as const, option: n.agentic.option, recordable: true } } : {}),
       renderer: r.name,
       chain: n.chain,
       log: n.log,
@@ -121,8 +137,39 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
   let merchantKey: KeyObject;
   let emulator: HspGatewayEmulator | undefined;
   let permit2Spender: Address | undefined;
-  let gateway: "hsp" | "emulator";
-  if (hsp) {
+  let gateway: Runtime["gateway"];
+  // HSP Agentic Payment: HashKey's QA MCP server once our egress IP is allowlisted, else the MCP emulator.
+  let agentic: { creatorHsp: HspAgentic; brandHsp: HspAgentic; option: PaymentOption; source: "hashkey-qa" | "emulator"; balanceOf: (t: Address, who: Address) => Promise<bigint> } | undefined;
+  if (agenticMode) {
+    if (opts.mode === "mainnet") throw new Error("HSP Agentic Payment is HashKey's QA environment: not used on mainnet");
+    const balanceOn = (p: PublicClient) => (t: Address, who: Address) => p.readContract({ address: t, abi: parseAbi(["function balanceOf(address) view returns (uint256)"]), functionName: "balanceOf", args: [who] });
+    if (process.env.HSP_ALLOWLISTED === "1") {
+      const [creatorHsp, brandHsp] = [await HspAgentic.connectQa(), await HspAgentic.connectQa()];
+      const option = chooseOption(await creatorHsp.getChainConfig(), { chainId: process.env.HSP_CHAIN_ID ? Number(process.env.HSP_CHAIN_ID) : undefined, token: process.env.HSP_TOKEN });
+      const net = option.chainId === d.chainId ? pub : option.chainId === 133 || option.chainId === 177 ? (createPublicClient({ transport: http(rpcFor(option.chainId === 133 ? "testnet" : "mainnet")) }) as PublicClient) : undefined;
+      if (!net) throw new Error(`HSP pays on chain ${option.chainId}, which this app has no RPC for`);
+      agentic = { creatorHsp, brandHsp, option, source: "hashkey-qa", balanceOf: balanceOn(net) };
+    } else {
+      const em = new HspAgenticEmulator({
+        chain: chain.chain,
+        rpcUrl: d.rpcUrl,
+        publicClient: pub,
+        executor: key("deployer"),
+        network: d.hspNetwork,
+        token: { address: d.token, decimals: 6, symbol: d.tokenSymbol, protocol: d.rail },
+        permit2: d.permit2,
+      });
+      const c = await em.client();
+      agentic = { creatorHsp: c, brandHsp: c, option: chooseOption(await c.getChainConfig()), source: "emulator", balanceOf: balanceOn(pub) };
+    }
+  }
+  if (agentic) {
+    gateway = agentic.source === "hashkey-qa" ? "hsp-agentic-qa" : "hsp-agentic-emulator";
+    // The merchant REST API isn't used: HSP manages the app credentials behind its MCP server.
+    hspBase = "http://127.0.0.1:9";
+    creds = { appKey: "unused", appSecret: randomBytes(32).toString("hex") };
+    merchantKey = generateKeyPairSync("ec", { namedCurve: "secp256k1" }).privateKey;
+  } else if (hsp) {
     hspBase = hsp.baseUrl;
     creds = { appKey: hsp.appKey, appSecret: hsp.appSecret };
     merchantKey = hsp.merchantKey;
@@ -157,6 +204,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     recordAt: hsp?.recordAt,
     publicUrl: opts.publicUrl,
     log,
+    ...(agentic ? { agentic: { hsp: agentic.creatorHsp, option: agentic.option, pollMs: agentic.source === "hashkey-qa" ? 15_000 : 2000 } } : {}),
   });
   const brand = new BrandAgent({
     account: brandKey,
@@ -166,12 +214,17 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     log,
     permit2Spender,
     jwtAudience: hsp?.jwtAudience,
+    ...(agentic ? { agentic: { hsp: agentic.brandHsp, option: agentic.option, approve, balanceOf: agentic.balanceOf } } : {}),
   });
   let conn: CreatorConnection | undefined;
   return {
     mode: opts.mode,
     operator: opts.operator,
     gateway,
+    approvals,
+    ...(agentic
+      ? { agentic: { source: agentic.source, option: agentic.option, recordable: agentic.option.chainId === d.chainId && agentic.option.token.address.toLowerCase() === d.token.toLowerCase() } }
+      : {}),
     renderer: r.name,
     chain,
     log,
@@ -189,7 +242,11 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
       log.add("chain", "tx", `creator revoked licence ${id}`, { tx: r.transactionHash });
       return r.transactionHash;
     },
-    stop: () => emulator?.stop(),
+    stop: () => {
+      emulator?.stop();
+      void agentic?.creatorHsp.close();
+      if (agentic && agentic.brandHsp !== agentic.creatorHsp) void agentic.brandHsp.close();
+    },
   };
 }
 

@@ -1,6 +1,10 @@
 // One complete paid render, end to end, and a refused one after revocation, with explorer links.
 //
 //   pnpm run testnet                                    chain 133 (emulated Gateway unless credentials exist)
+//   LIKENESS_HSP=agentic HSP_ALLOWLISTED=1 pnpm run testnet   HSP Agentic Payment on HashKey QA: asks in this
+//                                                       terminal before signing and before submitting
+//   pnpm run testnet -- --setup-only                    only the setup (creator registered, its agent named on
+//                                                       HspSettlement); nothing is paid
 //   LIKENESS_MAINNET_RUN=yes pnpm run demo -- --network mainnet   chain 177, real HSP only (Rohit's "deploy")
 //
 // Steps: creator registered (synthetic demo creator, attested) and its agent named; the brand's tUSDT
@@ -18,6 +22,8 @@ import { keychainPassword, loadAccount } from "../src/keys.js";
 import { startRuntime, ADVERTISING } from "../src/app/runtime.js";
 import { deploymentsDir } from "../src/chain/networks.js";
 import { handle } from "../src/app/server.js";
+import { hspStatuses } from "../src/app/jobs.js";
+import { terminalApprover } from "../src/hsp/agentic/terminal.js";
 
 const args = process.argv.slice(2);
 const network = (args.includes("--network") ? args[args.indexOf("--network") + 1] : "testnet") as "testnet" | "mainnet";
@@ -34,7 +40,7 @@ const PRICE = 50_000n; // 0.05 USDT
 // must be an HTTPS tunnel to this port; without one, the creator agent polls the Gateway instead.
 const port = Number(process.env.PORT ?? 8787);
 const publicUrl = process.env.PUBLIC_URL ?? `http://127.0.0.1:${port}`;
-const rt = await startRuntime({ mode: network, root, publicUrl, operator: true });
+const rt = await startRuntime({ mode: network, root, publicUrl, operator: true, approve: terminalApprover() });
 const server = createServer((req, res) => void handle(rt, req, res));
 await new Promise<void>((r) => server.listen(port, "127.0.0.1", () => r()));
 const link = (tx: string) => `${dep.explorer}/tx/${tx}`;
@@ -47,7 +53,7 @@ const step = async (label: string, account: ReturnType<typeof key>, address: Add
   console.log(`${label.padEnd(28)} ${link(r.transactionHash)}`);
 };
 
-try {
+run: try {
   // 1. Setup, once per deployment.
   const creator = key("creator");
   const d = rt.chain.d;
@@ -75,14 +81,24 @@ try {
   if ((await rt.chain.agentOf(creator.address)).toLowerCase() !== creatorAgent.toLowerCase()) {
     await step("setAgent", creator, d.settlement, hspSettlementAbi as Abi, "setAgent", [creatorAgent]);
   }
+  if (args.includes("--setup-only")) {
+    console.log("setup done: creator registered, its agent named on HspSettlement; nothing paid");
+    break run;
+  }
   const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function mint(address,uint256)"]);
   const brand = rt.brandAccount();
-  const balance = await rt.chain.public.readContract({ address: d.token, abi: erc20, functionName: "balanceOf", args: [brand.address] });
-  if (balance < 2n * PRICE) {
+  if (rt.agentic) {
+    // HSP Agentic Payment: funding and any Permit2 approval are the team's manual steps, never the agent's.
+    const t = rt.agentic.option.token;
+    console.log(`HSP Agentic Payment (${rt.agentic.source}): ${t.symbol} ${t.address} on chain ${rt.agentic.option.chainId}, ${t.protocol}; payer ${brand.address}`);
+    console.log("Funding and approvals are manual (pnpm hsp:agentic commands); the balance is checked before each signature.");
+  }
+  const balance = rt.agentic ? 2n * PRICE : await rt.chain.public.readContract({ address: d.token, abi: erc20, functionName: "balanceOf", args: [brand.address] });
+  if (!rt.agentic && balance < 2n * PRICE) {
     if (!dep.testToken) throw new Error(`the brand holds ${balance} USDT base units; fund it with at least 0.10 USDT first`);
     await step("mint tUSDT to brand", key("deployer"), d.token, erc20 as Abi, "mint", [brand.address, 1_500_000n]);
   }
-  if ((await rt.chain.public.readContract({ address: d.token, abi: erc20, functionName: "allowance", args: [brand.address, d.permit2!] })) < 2n * PRICE) {
+  if (!rt.agentic && (await rt.chain.public.readContract({ address: d.token, abi: erc20, functionName: "allowance", args: [brand.address, d.permit2!] })) < 2n * PRICE) {
     // forceApprove: HashKey's testnet USDT is classic Tether (approve returns nothing, zero first).
     await forceApprove(rt.chain.public, (a, req) => step(`brand approves Permit2 (${req.args[1]})`, a, req.address, req.abi as Abi, req.functionName, [...req.args]), brand, d.token, d.permit2!, 1_500_000n); // bounded
   }
@@ -93,8 +109,30 @@ try {
   const id = await rt.brand.license(conn, { category: ADVERTISING, regions: 1, durationSeconds: 7n * 86400n, renderCap: 3, purpose: `${network} demo run` });
   console.log(`licence ${id} issued`);
   const paid = await rt.brand.payForRender(conn, id);
-  console.log(`${"HSP payment (Permit2)".padEnd(28)} ${link(paid.txHash)}`);
-  void rt.creatorAgent.pollPayment(paid.paymentRequestId).catch(() => undefined); // in case no webhook arrives
+  if (rt.agentic) {
+    // HSP's statuses, as the creator's agent sees them (query_payment every 15 s), until safe/finalized/failed.
+    console.log(`submitted: flow_id ${paid.flowId}, payment_request_id ${paid.paymentRequestId}, ${paid.tokenTotalRaw} raw units authorized`);
+    let shown = 0;
+    for (;;) {
+      const st = hspStatuses(rt.log, paid.flowId);
+      for (const x of st.slice(shown)) console.log(`  HSP: ${x.summary}${x.attribution !== undefined ? ` (attribution_verified ${x.attribution})` : ""}`);
+      shown = st.length;
+      const last = st.at(-1);
+      if (last && ["payment-safe", "payment-finalized", "payment-failed"].includes(last.status)) {
+        if (last.status === "payment-failed") throw new Error(`HSP: payment failed: ${last.payment?.status_reason ?? "no reason given"}`);
+        console.log(`${"HSP payment".padEnd(28)} ${last.tx ? link(last.tx) : "(no tx hash returned)"}`);
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    if (!rt.agentic.recordable) {
+      console.log("Not recorded on chain: HspSettlement is deployed for another token than HSP's (redeploy pending). Stopping before render and revoke.");
+      throw new Error("stop: redeploy pending");
+    }
+  } else {
+    console.log(`${"HSP payment (Permit2)".padEnd(28)} ${link(paid.txHash)}`);
+    void rt.creatorAgent.pollPayment(paid.paymentRequestId).catch(() => undefined); // in case no webhook arrives
+  }
   const p = await rt.brand.waitRecorded(id, paid.renderIndex, { timeoutMs: 300_000, intervalMs: 2000 });
   console.log(`payment recorded: ${Number(p.amount) / 1e6} USDT, nonce ${p.nonceBound ? "bound to the render" : "from the Gateway"}`);
   const out = await rt.render.renderAndAnchor(id, paid.renderIndex, `${network} hero shot`);

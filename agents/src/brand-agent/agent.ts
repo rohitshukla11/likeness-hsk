@@ -6,6 +6,9 @@ import { unitsOf, usdValue, verifyCart, type CartMandate } from "../hsp/cart.js"
 import type { HspClient } from "../hsp/client.js";
 import { buildPaymentMandate, signEip3009, signPermit2, type ExactPayload } from "../hsp/payment.js";
 import type { MessageLog } from "../log.js";
+import { type HspAgentic, MERCHANT_NAME } from "../hsp/agentic/client.js";
+import type { PaymentOption } from "../hsp/agentic/chainConfig.js";
+import { type Approver, PaymentCancelled, payWithHsp } from "../hsp/agentic/payer.js";
 import { Budget, checkTerms, type BrandPolicy, type TermsView } from "./policy.js";
 
 const SKILL_TERMS = "likeness.terms";
@@ -21,6 +24,12 @@ export interface BrandAgentConfig {
   /** The Gateway's executor address, the Permit2 spender (USDT rail only). */
   permit2Spender?: Address;
   fetch?: typeof fetch;
+  /**
+   * HSP Agentic Payment (MCP): HSP builds the eip712 and the JWT; this agent signs the eip712 with the
+   * brand wallet, only after `approve` says yes, and again before submission. `option` is the network
+   * and token chosen from get_chain_config; balances are read from the chain HSP pays on.
+   */
+  agentic?: { hsp: HspAgentic; option: PaymentOption; approve: Approver; balanceOf: (token: Address, owner: Address) => Promise<bigint> };
 }
 
 export interface CreatorConnection {
@@ -39,6 +48,8 @@ export interface RenderPaid {
   nonce: Hex;
   nonceBound: boolean;
   txHash: Hex;
+  /** HSP Agentic Payment: the locked raw amount authorized (raw token units, not funds received). */
+  tokenTotalRaw?: string;
 }
 
 export class BrandAgent {
@@ -138,6 +149,7 @@ export class BrandAgent {
 
     const task = await this.ask(conn, { skill: SKILL_RENDER_PAYMENT, licenceId: licenceId.toString() });
     if (task.status.state !== "completed") return this.refuse(`creator agent ${task.status.state}: ${textOf(task.status.message ?? { parts: [] })}`);
+    if (this.c.agentic) return this.payAgentic(conn, licenceId, l, task);
     const art = dataOf(task.artifacts?.[0] ?? { parts: [] }) as {
       [CART_MANDATE_KEY]: CartMandate;
       hsp: { payment_request_id: string; payment_url: string; flow_id?: string };
@@ -189,6 +201,75 @@ export class BrandAgent {
       nonce,
       nonceBound: nonce === bound,
       txHash: (submitted.tx_signature ?? "0x") as Hex,
+    };
+  }
+
+  /**
+   * HSP Agentic Payment: the order the creator's agent created is checked against the licence (team
+   * name, the creator's on-chain payout, the price in USD, the chain and token from get_chain_config)
+   * and the brand's budget; then prepare → approval → sign the returned eip712 → finalize → approval →
+   * submit. Nothing is signed or submitted without the approvals.
+   */
+  private async payAgentic(conn: CreatorConnection, licenceId: bigint, l: Awaited<ReturnType<Likeness["licence"]>>, task: Task): Promise<RenderPaid> {
+    const { hsp, option, approve, balanceOf } = this.c.agentic!;
+    const ch = this.c.chain;
+    const art = dataOf(task.artifacts?.[0] ?? { parts: [] }) as { hsp: { flow_id: string; payment_request_id: string }; likeness: { licenceId: string; renderIndex: number } };
+    const renderIndex = l.renderCount;
+    if (art.likeness?.licenceId !== licenceId.toString() || art.likeness.renderIndex !== renderIndex) throw new Error("the order is for a different render");
+    if (!art.hsp?.flow_id) throw new Error("the creator agent returned no HSP order");
+
+    const order = await hsp.getOrder(art.hsp.flow_id);
+    const payout = await ch.payoutOf(conn.creator);
+    const contents = ((order.cart_mandate as { contents?: Record<string, unknown> } | undefined)?.contents ?? {}) as { payment_request?: { method_data?: { data?: { chain_id?: number; contract_address?: string } }[]; details?: { total?: { amount?: { currency?: string; value?: string } } } } };
+    if (order.merchant_name !== undefined && order.merchant_name !== MERCHANT_NAME) throw new Error(`the order is for "${String(order.merchant_name)}", not ${MERCHANT_NAME}`);
+    if (order.pay_to !== undefined && String(order.pay_to).toLowerCase() !== payout.toLowerCase()) throw new Error("the order pays someone other than the creator's on-chain payout: nothing signed");
+    const total = contents.payment_request?.details?.total?.amount;
+    if (total && (total.currency !== "USD" || total.value !== usdValue(l.pricePerRender))) throw new Error(`the order's total ${total.value} ${total.currency} isn't the licence price ${usdValue(l.pricePerRender)} USD`);
+    const method = contents.payment_request?.method_data?.[0]?.data;
+    if (method && (Number(method.chain_id) !== option.chainId || String(method.contract_address).toLowerCase() !== option.token.address.toLowerCase())) throw new Error("the order is for another chain or token");
+
+    const b = this.budget.check(l.pricePerRender);
+    if (!b.ok) return this.refuse(b.reason);
+    this.c.log.add("brand-agent", "policy", `order accepted: ${usdValue(l.pricePerRender)} USD to ${payout} for render ${renderIndex}`, { flow_id: art.hsp.flow_id, payment_request_id: art.hsp.payment_request_id });
+
+    // The most this brand authorizes for one render: its per-render cap, in the token's raw units.
+    const maxRaw = unitsOf(usdValue(this.c.policy.maxPricePerRender), option.token.decimals);
+    let submitted;
+    try {
+      submitted = await payWithHsp({
+        hsp,
+        signer: this.c.account,
+        approve: async (a) => {
+          this.c.log.add("brand-agent", "approval", `asking to approve ${a.stage === "sign" ? "signing" : "submission"}: ${a.tokenTotalRaw} raw to ${a.payTo} from ${a.payer}`, a);
+          const yes = await approve(a);
+          this.c.log.add("brand-agent", "approval", `${a.stage === "sign" ? "signing" : "submission"} ${yes ? "approved" : "cancelled"}`);
+          return yes;
+        },
+        flowId: art.hsp.flow_id,
+        paymentRequestId: art.hsp.payment_request_id,
+        expect: { payTo: payout, token: option.token },
+        balanceOf,
+        maxRaw,
+        log: (event, detail, data) => this.c.log.add(event.startsWith("wallet") ? "brand-agent" : "hsp-gateway", event === "wallet" ? "payment-mandate" : "hsp.response", detail, data),
+      });
+    } catch (e) {
+      if (e instanceof PaymentCancelled) return this.refuse(e.message);
+      throw e;
+    }
+    this.budget.record(l.pricePerRender);
+    if (submitted.nonce) {
+      // For the creator's agent, to read a Permit2 payment the Gateway broadcast; it checks the nonce on chain.
+      await this.ask(conn, { skill: SKILL_RENDER_PAYMENT, submitted: true, flow_id: submitted.flowId, nonce: submitted.nonce }).catch(() => undefined);
+    }
+    return {
+      licenceId,
+      renderIndex,
+      paymentRequestId: submitted.paymentRequestId,
+      flowId: submitted.flowId,
+      nonce: submitted.nonce ?? ("0x" as Hex),
+      nonceBound: false,
+      txHash: "0x" as Hex, // known once HSP broadcasts: query_payment's payment.tx_signature
+      tokenTotalRaw: submitted.tokenTotalRaw,
     };
   }
 

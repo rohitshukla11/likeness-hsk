@@ -43,6 +43,20 @@ What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 HashKey's published Merchant API, and the app says so on every page. The real-Gateway path is built and
 switches on with one config file ([docs/HSP_SETUP.md](docs/HSP_SETUP.md)).
 
+## Real HSP Agentic Payment on QA
+
+HashKey's **HSP Agentic Payment** MCP server (QA, guide revision 2026-10-30) is wired into both agents
+through the official MCP client SDK: the creator's agent creates the order (`merchant_name` "Likeness",
+`pay_to` the creator's on-chain payout, network and token from `get_chain_config`); the brand's agent
+prepares, signs exactly the `eip712` HSP returns, finalizes and submits, with **two approvals in the
+brand console** (recipient, payer, `token_total_raw`) before signing and before submitting; the
+creator's agent follows `query_payment` every 15 s and reports the team attribution.
+
+**Status:** built and tested offline against an MCP emulator with the same eight tools. The first QA
+payment waits for HashKey to allowlist our egress IP (the one health check so far answered 403). Flow,
+rules and the redeploy plan: [docs/HSP_AGENTIC.md](docs/HSP_AGENTIC.md); the step-by-step live run:
+[docs/HSP_LIVE_RUN.md](docs/HSP_LIVE_RUN.md).
+
 **Mainnet-ready: one-command runbook, executed if selected.** The HSK Chain organisers announced in
 the hackathon's Telegram group that projects don't need a mainnet deployment during the hackathon:
 testnet is the submission, and winners deploy to mainnet afterwards. Our
@@ -146,7 +160,9 @@ sequenceDiagram
 
 ## Known limitations
 
-- **HSP is emulated** until HashKey issues merchant credentials. Three details are unconfirmed and
+- **HSP Agentic Payment on QA not run yet:** waiting for HashKey's IP allowlisting. Until the contracts
+  are redeployed with the token HSP pays in, a QA payment is shown but not recorded on chain.
+- **HSP merchant API is emulated** until HashKey issues merchant credentials. Three details are unconfirmed and
   isolated in one place each:
   - the payer-side submit route;
   - where the Permit2 signature goes in the mandate, and the `user_authorization` format;
@@ -166,8 +182,9 @@ sequenceDiagram
 ```sh
 git clone --recurse-submodules https://github.com/rohitshukla11/likeness-hsk && cd likeness-hsk
 (cd contracts && forge build && forge test)            # 79 contract tests; fork suites run with HSK_RPC_URL / HSK_TESTNET_RPC_URL
-cd agents && pnpm install && pnpm test                 # 40 agent tests (anvil from Foundry needed)
+cd agents && pnpm install && pnpm test                 # 59 agent tests (anvil from Foundry needed)
 LIKENESS_MODE=local pnpm app                           # http://127.0.0.1:8788: a local chain, no keys needed
+LIKENESS_HSP=agentic LIKENESS_MODE=local pnpm app      # the same with HSP Agentic Payment (MCP emulator) and the approvals
 ```
 
 **Pages:**

@@ -18,6 +18,8 @@ export interface LogEvent {
     | "hsp.request"
     | "hsp.response"
     | "hsp.webhook"
+    | "hsp.status"
+    | "approval"
     | "tx"
     | "refused"
     | "error"

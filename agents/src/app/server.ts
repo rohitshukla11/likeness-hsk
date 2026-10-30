@@ -13,6 +13,8 @@ import { a2aResponse, readBody, sendJson } from "../a2a/server.js";
 import { Refused } from "../brand-agent/agent.js";
 import { usdValue } from "../hsp/cart.js";
 import { claimMessage, ClaimError, verifyClaim } from "./claim.js";
+import { MERCHANT_NAME } from "../hsp/agentic/client.js";
+import { hspStatuses, PaymentJobs } from "./jobs.js";
 import { ADVERTISING, listLicences, listPayments, startRuntime, type Mode, type Runtime } from "./runtime.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -31,6 +33,10 @@ function isLocal(req: IncomingMessage) {
 }
 
 const json = (res: ServerResponse, status: number, body: unknown) => sendJson(res, status, body);
+
+/** One set of payment jobs per runtime. */
+const jobsOf = new WeakMap<Runtime, PaymentJobs>();
+const jobs = (rt: Runtime) => jobsOf.get(rt) ?? (jobsOf.set(rt, new PaymentJobs(rt)), jobsOf.get(rt)!);
 
 export async function handle(rt: Runtime, req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://x");
@@ -77,6 +83,8 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
       brand: rt.brandAddress,
       terms: { pricePerRender: t.pricePerRender.toString(), price: usdValue(t.pricePerRender), maxRenders: t.maxRenders, categories: t.categories, autoApprove: t.autoApprove },
       spentToday: rt.brand.budget.spentToday.toString(),
+      // HSP Agentic Payment: where it runs, the network and token from get_chain_config, our team name.
+      agentic: rt.agentic ? { source: rt.agentic.source, network: rt.agentic.option.network, chainId: rt.agentic.option.chainId, token: rt.agentic.option.token, recordable: rt.agentic.recordable, merchantName: MERCHANT_NAME } : null,
     });
   }
   if (req.method === "GET" && path === "/api/log") return json(res, 200, rt.log.since(Number(url.searchParams.get("since") ?? 0)));
@@ -164,23 +172,20 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
         return json(res, 200, { licenceId: id.toString() });
       }
       if (req.method === "POST" && path === "/api/brand/pay") {
-        const conn = await rt.connect();
-        const fromSeq = rt.log.events.at(-1)?.seq ?? 0;
-        const id = BigInt(body.licenceId ?? "0");
-        const paid = await rt.brand.payForRender(conn, id);
-        const p = await rt.brand.waitRecorded(id, paid.renderIndex);
-        const out = await rt.render.renderAndAnchor(id, paid.renderIndex, body.brief ?? "demo ad");
-        rt.store.save(out.assetHash, out.bytes, { mime: out.mime, licenceId: id.toString(), renderIndex: paid.renderIndex });
-        return json(res, 200, {
-          licenceId: id.toString(),
-          renderIndex: paid.renderIndex,
-          hspTx: paid.txHash,
-          nonceBound: p.nonceBound,
-          assetHash: out.assetHash,
-          anchorTx: out.tx,
-          fromSeq,
-          toSeq: rt.log.events.at(-1)?.seq ?? fromSeq,
-        });
+        // Runs in the background: the console polls the job, shows the approvals and HSP's statuses.
+        const job = jobs(rt).start(BigInt(body.licenceId ?? "0"), body.brief ?? "demo ad");
+        return json(res, 200, { jobId: job.id, fromSeq: rt.log.events.at(-1)?.seq ?? 0 });
+      }
+      if (req.method === "GET" && path === "/api/brand/job") {
+        const job = jobs(rt).jobs.get(url.searchParams.get("id") ?? "");
+        if (!job) return json(res, 404, { error: "no such payment" });
+        const statuses = hspStatuses(rt.log, job.flowId);
+        const last = statuses.at(-1);
+        return json(res, 200, { job, approvals: rt.approvals.list(), statuses, tx: job.hspTx ?? last?.tx ?? null, attribution: last?.attribution ?? null, toSeq: rt.log.events.at(-1)?.seq ?? 0 });
+      }
+      if (req.method === "POST" && path === "/api/brand/approve") {
+        const ok = rt.approvals.decide(String(body.id ?? ""), body.decision === "approve");
+        return ok ? json(res, 200, { ok: true }) : json(res, 409, { error: "this approval is no longer pending (answered, or its quote expired)" });
       }
       if (req.method === "POST" && path === "/api/brand/deliver") {
         // A render that was paid and recorded but not yet delivered (e.g. recorded by `pnpm run recover`).
