@@ -41,7 +41,7 @@ describe("the app server (local devnet, emulated HSP Gateway)", () => {
   });
 
   it("serves the pages, the agent card and the state", async () => {
-    for (const p of ["/", "/brand", "/creator", "/verify", "/agent", "/static/app.js"]) expect((await fetch(`${base}${p}`)).status).toBe(200);
+    for (const p of ["/", "/brand", "/creator", "/verify", "/agent", "/static/app.js", "/console", "/console/brand", "/console/verify"]) expect((await fetch(`${base}${p}`)).status).toBe(200);
     expect((await getJson("/.well-known/agent-card.json")).url).toBe(`${base}/a2a`);
     const s = await getJson("/api/state");
     expect(s.rail).toBe("permit2");

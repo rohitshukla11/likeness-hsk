@@ -2,15 +2,13 @@
 
 import { useEffect } from "react";
 import { btnClass, NoticePage } from "@/components/ds";
-import { AppHeader } from "@/components/site/AppHeader";
+import { AppShell } from "@/components/site/AppState";
 
 export default function ErrorPage({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => console.error(error), [error]);
   return (
     <div className="flex min-h-screen flex-col bg-paper">
-      <div className="bg-ink text-white">
-        <AppHeader />
-      </div>
+      <AppShell>
       <main id="main" className="flex-1 text-ink">
         <NoticePage
           title="Something went wrong"
@@ -21,10 +19,11 @@ export default function ErrorPage({ error, retry }: { error: Error & { digest?: 
             </button>
           }
         >
-          This page could not load. Nothing was signed or sent. If the Arc RPC is busy, trying again in a moment usually works.
+          This page could not load. Nothing was signed or sent. If the HSK Chain RPC is busy, trying again in a moment usually works.
           {error.digest && <span className="mt-2 block font-mono text-[13px]">Reference: {error.digest}</span>}
         </NoticePage>
       </main>
+      </AppShell>
     </div>
   );
 }

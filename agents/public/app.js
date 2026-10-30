@@ -50,6 +50,9 @@ const NETWORK = { 133: "HSK Chain testnet (133)", 177: "HSK Chain mainnet (177)"
 
 /** Header, plus a banner that says plainly which chain and which HSP Gateway this server uses. */
 export function header(active, state) {
+  // Served at / on its own, or at /console beside the web UI: links follow the prefix.
+  const prefix = location.pathname.startsWith("/console") ? "/console" : "";
+  const at = (h) => (prefix ? (h === "/" ? prefix : `${prefix}${h}`) : h);
   const links = [["/", "Overview"], ["/brand", "Brand console"], ["/creator", "Creator"], ["/verify", "Verify"], ["/agent", "Agent card"]];
   const gw = {
     hsp: "HSP Gateway: HashKey (live merchant credentials)",
@@ -62,8 +65,9 @@ export function header(active, state) {
     : "";
   document.body.insertAdjacentHTML(
     "afterbegin",
-    `<header><span class="brand">Likeness on HSK Chain</span>${links.map(([h, t]) => `<a href="${h}" class="${h === active ? "on" : ""}">${t}</a>`).join("")}</header>${banner}`,
+    `<header><span class="brand">Likeness on HSK Chain</span>${links.map(([h, t]) => `<a href="${at(h)}" class="${h === active ? "on" : ""}">${t}</a>`).join("")}${prefix ? `<a href="/">← The app</a>` : ""}</header>${banner}`,
   );
+  if (prefix) for (const a of document.querySelectorAll("main a[href^='/']")) if (links.some(([h]) => h !== "/" && a.getAttribute("href") === h)) a.setAttribute("href", at(a.getAttribute("href")));
 }
 
 /** The A2A → AP2 → HSP → chain steps of one paid render, from the message log. */

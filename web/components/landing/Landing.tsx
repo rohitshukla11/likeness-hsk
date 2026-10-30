@@ -16,7 +16,7 @@ import { BUILT_ON, MEASUREMENTS, TESTIMONIALS } from "@/lib/site-content";
 
 
 const RIBBON_A = ["Advertising", "✳", "Social", "✳", "Editorial", "✳", "Entertainment", "✳", "Product", "✳"];
-const RIBBON_B = ["Approve", "✳", "Get paid per render", "✳", "Revoke any time", "✳", "Verified humans", "✳"];
+const RIBBON_B = ["Agents agree over A2A", "✳", "Paid per render through HSP", "✳", "Revoke any time", "✳", "Receipts on HSK Chain", "✳"];
 
 export function Landing() {
   return (
@@ -66,25 +66,25 @@ function Hero() {
           <a href="#how" className="py-3 text-ink no-underline hover:underline">
             How it works
           </a>
-          <Link href="/market" className="py-3 text-ink no-underline hover:underline">
+          <Link href="/creators" className="py-3 text-ink no-underline hover:underline">
             Creators
           </Link>
-          <Link href="/status#contracts" className="py-3 text-ink no-underline hover:underline">
-            For AI tools
+          <Link href="/how" className="py-3 text-ink no-underline hover:underline">
+            For AI agents
           </Link>
           <Link href="/verify" className="py-3 text-ink no-underline hover:underline">
             Verify
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-4">
-          <Link href="/dashboard" className="hidden py-3 text-[14px] font-medium text-ink no-underline hover:underline sm:inline">
-            Log in
+          <Link href="/creator" className="hidden py-3 text-[14px] font-medium text-ink no-underline hover:underline sm:inline">
+            For creators
           </Link>
-          <Link href="/brand/onboard" className={pillClass("outline-dark", "hidden px-5 text-[14px] sm:inline-flex")}>
+          <Link href="/creators/ana-reyes" className={pillClass("outline-dark", "hidden px-5 text-[14px] sm:inline-flex")}>
             License a face
           </Link>
-          <Link href="/onboard" className={pillClass("ink", "px-5 text-[14px]")}>
-            Become a creator
+          <Link href="/brand" className={pillClass("ink", "px-5 text-[14px]")}>
+            Brand console
           </Link>
         </div>
       </header>
@@ -159,24 +159,24 @@ function Stats() {
               </span>
             </div>
             <span className="mt-auto self-start rounded-full bg-violet-deep px-3.5 py-1.5 text-[13px] font-semibold text-white">For brands</span>
-            <h3 className="m-0 font-display text-[clamp(20px,2.4vw,26px)] font-extrabold">VERIFIED HUMANS ONLY</h3>
+            <h3 className="m-0 font-display text-[clamp(20px,2.4vw,26px)] font-extrabold">AGENTS THAT PAY FOR CONSENT</h3>
             <p className="m-0 max-w-[460px] text-[15px] leading-relaxed text-[#3E4148]">
-              Every creator passed an ID check, a liveness selfie and a face match. Their photos were captured live, so nobody can license a face that
-              isn&apos;t theirs.
+              A brand&apos;s agent asks the creator&apos;s agent over A2A. Each render is quoted from the creator&apos;s terms on HSK Chain, approved by a
+              person twice, and paid through HSP before it exists.
             </p>
           </article>
           <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
             {MEASUREMENTS.registerMs.value !== null && (
               <article className={`rv${seen ? " in" : ""} flex flex-1 flex-col gap-1.5 rounded-[30px] bg-lime bg-[url(/landing/card-lime.png)] bg-cover bg-center p-7 text-ink`} style={{ transitionDelay: ".25s" }} title={MEASUREMENTS.registerMs.source}>
                 <span className="tnum font-display text-[clamp(40px,5vw,52px)] font-black leading-none">{ms} MS</span>
-                <span className="font-display text-[17px] font-bold leading-snug">TO REGISTER A CREATOR ON ARC</span>
-                <span className="text-[13px] text-[#3E4148]">Measured on Arc mainnet, send to receipt.</span>
+                <span className="font-display text-[17px] font-bold leading-snug">TO REGISTER A CREATOR ON HSK CHAIN</span>
+                <span className="text-[13px] text-[#3E4148]">Measured on HSK Chain, send to receipt.</span>
               </article>
             )}
             <article className={`rv${seen ? " in" : ""} flex flex-1 flex-col gap-1.5 rounded-[30px] bg-ink-line p-7 text-white`} style={{ transitionDelay: ".4s" }} title={MEASUREMENTS.rendersWithReceipt.source}>
               <span className="tnum font-display text-[clamp(40px,5vw,52px)] font-black leading-none text-lime">{pct}%</span>
               <span className="font-display text-[17px] font-bold leading-snug">OF RENDERS CARRY A RECEIPT</span>
-              <span className="text-[13px] text-grey-dark">By design: payment and receipt are one transaction.</span>
+              <span className="text-[13px] text-grey-dark">By design: no recorded payment, no receipt, no file.</span>
             </article>
           </div>
         </div>
@@ -188,10 +188,10 @@ function Stats() {
 // ---------------------------------------------------------------- how it works
 
 const STEPS = [
-  { title: "PROVE IT'S YOU", body: "An ID check for 18+, a liveness selfie, and three guided photos matched to it. The verification session is deleted once you're attested." },
-  { title: "SET YOUR TERMS", body: "Pick uses, regions, a price per render and a cap. Political, adult, minor-involving, impersonating and deceptive uses are banned in the contract." },
-  { title: "APPROVE BRANDS", body: "A brand requests a licence and you approve it. Your photos are released to that licence only, unlocked with your passkey (Face ID or Touch ID)." },
-  { title: "GET PAID, OR REVOKE", body: "Each render pays you and records a receipt in one Arc transaction. Revoke and the next render is refused." },
+  { title: "SET YOUR TERMS", body: "A price per render, uses, regions, a cap and a maximum duration, in CreatorRegistry on HSK Chain. Political, adult and deceptive uses are banned in the contract." },
+  { title: "AGENTS AGREE", body: "A brand's agent asks your agent for a licence over A2A. Your agent checks it against your on-chain terms, and the licence is issued on chain." },
+  { title: "PAID THROUGH HSP", body: "For each render your agent creates an HSP order paid to you. The brand approves twice, signs exactly what HSP returned, and HSP settles it on HSK Chain." },
+  { title: "RECEIPT, OR REVOKE", body: "Each paid render is recorded in HspSettlement and gets a receipt anyone can verify. Revoke and the next render is refused before anything is signed." },
 ];
 
 function HowItWorks() {
@@ -202,7 +202,7 @@ function HowItWorks() {
     <section id="how" className="scroll-mt-4 overflow-hidden bg-white">
       <div ref={ref} className="mx-auto flex max-w-[1180px] flex-col gap-12 px-4 py-24 sm:px-8">
         <h2 className="m-0 text-center font-display text-[clamp(28px,4vw,44px)] font-extrabold leading-[1.2] tracking-[-0.01em]">
-          <span className={`${c("from-l")} inline-block`}>FROM SELFIE</span>{" "}
+          <span className={`${c("from-l")} inline-block`}>FROM TERMS</span>{" "}
           <span aria-hidden="true" className={`${c("pop")} inline-flex h-12 w-24 items-center gap-1 rounded-full bg-ink px-[5px] align-middle`}>
             <span className="h-[38px] w-[38px] rounded-full bg-lime" />
             <span className="h-[38px] w-[38px] rounded-full border-2 border-lime" />
@@ -282,8 +282,8 @@ function HowItWorks() {
                 </span>
               </div>
             </div>
-            <Link href="/onboard" className={pillClass("ink", "min-h-[54px]")}>
-              Get started
+            <Link href="/how" className={pillClass("ink", "min-h-[54px]")}>
+              See how the agents pay
             </Link>
           </div>
         </div>
@@ -353,7 +353,7 @@ function Creators() {
           return (
             <Link
               key={ex.photo}
-              href="/onboard"
+              href="/creators/ana-reyes"
               className={`card-in${seen ? " in" : ""} relative block self-start rounded-[28px] p-3 text-ink no-underline shadow-[0_18px_40px_rgba(18,19,22,0.12)] ${PLACE[i]}`}
               style={{ transform, transitionDelay: `${0.1 + i * 0.18}s`, backgroundImage: `url(${ex.frame})`, backgroundSize: "cover" }}
             >
@@ -364,9 +364,9 @@ function Creators() {
               <div className="absolute bottom-6 left-6 right-6 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2.5">
                 <span className="flex min-w-0 flex-col">
                   <span className="font-display text-[14px] font-bold">YOUR FACE HERE</span>
-                  <span className="text-[12px] text-grey">Verify once, get paid per render</span>
+                  <span className="text-[12px] text-grey">Your terms, paid per render</span>
                 </span>
-                <span className={pillClass("ink", "min-h-9 px-3 text-[12px]")}>Become a creator</span>
+                <span className={pillClass("ink", "min-h-9 px-3 text-[12px]")}>See the demo creator</span>
               </div>
             </Link>
           );
@@ -437,11 +437,11 @@ function Quotes() {
                   </span>
                 ))}
               </span>
-              <Link href="/brand/onboard" className={pillClass("outline-dark", "px-6 text-[14px]")}>
+              <Link href="/creators/ana-reyes" className={pillClass("outline-dark", "px-6 text-[14px]")}>
                 License a face
               </Link>
-              <Link href="/onboard" className={pillClass("ink", "px-6 text-[14px]")}>
-                Get started
+              <Link href="/verify" className={pillClass("ink", "px-6 text-[14px]")}>
+                Verify a file
               </Link>
             </span>
           </div>

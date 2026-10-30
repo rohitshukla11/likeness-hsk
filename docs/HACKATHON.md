@@ -198,3 +198,19 @@ address 35.254.5.116, behind Caddy with Let's Encrypt on https://35-254-5-116.ss
   emulator executor), made fresh with `encryptKeystore`; the keystore password and the demo password live in
   Secret Manager and reach the app through a root-created tmpfs file. Nothing from the team's other keystores
   is on the server.
+
+## 30–31 October: the web UI (`web/`), rebuilt from likeness-arc
+
+**Reused** (copied from Rohit's earlier project [likeness-arc](https://github.com/rohitshukla11/likeness-arc)
+@ea40c8e, `web/`, in commit de3cc4e "port from likeness-arc", then edited): the design system
+(`components/ds`, `app/globals.css`), the landing page, header and footer, the creator card, the Verify page's
+layout, `components/ui.tsx` helpers, the landing images, the Next.js and Tailwind setup (same pinned versions).
+
+**Rebuilt for HSK during the hackathon:** every data path. The UI is a front end only; Next.js proxies `/api`,
+`/a2a`, `/.well-known` and `/console` to the agents backend. New: `lib/api.ts` (the backend's types),
+`lib/steps.ts` (the HSP Agentic Payment steps), the creator profile with the licence request, the brand console
+(`components/brand/PaymentFlow.tsx`: approval 1 before signing, approval 2 before submitting, HSP's statuses,
+the steps, the result and download, "Behind the scenes"), the creator dashboard with revoke, Verify on the
+on-chain receipt (sha256 in the browser), How it works, the HSP mode banner and the demo-password unlock. All
+Arc copy, Arc and USDC constants, Dynamic wallets, Didit, Mera, C2PA signing, the escrow and arc's server code
+were left out. The original console stays at `/console`.

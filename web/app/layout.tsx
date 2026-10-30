@@ -2,13 +2,12 @@ import type { Metadata } from "next";
 import { Poppins, Unbounded } from "next/font/google";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import "./globals.css";
-import { Providers } from "./providers";
 
 const display = Unbounded({ subsets: ["latin"], weight: ["700", "800", "900"], variable: "--font-display-face", display: "swap" });
 const body = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-body-face", display: "swap" });
 
 const TAGLINE = "License your face to AI. Your terms, paid per image.";
-const DESCRIPTION = `${TAGLINE} Verified creators set the terms, brands pay per render from USDC escrow, and either side can revoke. Live on Arc mainnet with small amounts.`;
+const DESCRIPTION = `${TAGLINE} A brand's AI agent licenses a creator's likeness from the creator's own agent over A2A and pays per render through HSP on HSK Chain; consent is checked before any money moves. HSK Chain testnet.`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
@@ -28,10 +27,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a href="#main" className="sr-only z-50 rounded-full bg-lime px-5 py-3 font-semibold text-ink focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
           Skip to content
         </a>
-        <Providers>
-          {children}
-          <SiteFooter />
-        </Providers>
+        {children}
+        <SiteFooter />
       </body>
     </html>
   );

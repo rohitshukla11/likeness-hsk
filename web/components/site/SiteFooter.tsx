@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const SOURCE_URL = "https://github.com/rohitshukla11/likeness-arc";
+export const SOURCE_URL = "https://github.com/rohitshukla11/likeness-hsk";
 
 /** Footer from the landing mockup, shared by every page. */
 export function SiteFooter() {
@@ -15,9 +15,9 @@ export function SiteFooter() {
           </h2>
           <div className="flex flex-col gap-3 text-[15px] text-grey-dark">
             <span className="text-white">License your face to AI. Your terms, paid per image.</span>
-            <span>Live on Arc mainnet · small amounts · adults only</span>
-            <Link href="/status" className="text-grey-dark underline-offset-2 hover:text-white hover:underline">
-              What this server runs
+            <span>HSK Chain testnet · paid through HSP · test tokens, no value</span>
+            <Link href="/how" className="text-grey-dark underline-offset-2 hover:text-white hover:underline">
+              How the agents pay
             </Link>
           </div>
         </div>
@@ -26,12 +26,15 @@ export function SiteFooter() {
             <Link href="/#how" className="text-grey-dark hover:text-white">
               How it works
             </Link>
-            <Link href="/market" className="text-grey-dark hover:text-white">
+            <Link href="/creators" className="text-grey-dark hover:text-white">
               Creators
             </Link>
-            <Link href="/status#contracts" className="text-grey-dark hover:text-white">
+            <Link href="/how#contracts" className="text-grey-dark hover:text-white">
               Contracts
             </Link>
+            <a href="/console" className="text-grey-dark hover:text-white">
+              Console
+            </a>
             <a href={SOURCE_URL} className="text-grey-dark hover:text-white" target="_blank" rel="noreferrer">
               Source<span className="sr-only"> (opens GitHub)</span>
             </a>

@@ -30,6 +30,8 @@ const publicGuard = guardFromEnv(`${deploymentsDir(root)}/${mode}-paid-today.jso
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
 const PAGES: Record<string, string> = { "/": "index.html", "/brand": "brand.html", "/creator": "creator.html", "/verify": "verify.html", "/agent": "agent.html" };
+// The same pages under /console, where the public server keeps them beside the web UI (web/).
+for (const [p, f] of Object.entries({ ...PAGES })) PAGES[p === "/" ? "/console" : `/console${p}`] = f;
 
 function isLocal(req: IncomingMessage) {
   const a = req.socket.remoteAddress ?? "";
