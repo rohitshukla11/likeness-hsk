@@ -255,15 +255,55 @@ const licenceIssued = parseAbiItem(
   "event LicenceIssued(uint256 indexed id, address indexed creator, address indexed licensee, uint32 category, uint32 regions, uint64 end, uint32 renderCap, uint128 pricePerRender, bytes32 purposeHash, bool autoApproved)",
 );
 
+/** HSK testnet's RPC answers eth_getLogs for ranges under ~5,000 blocks. */
+const LOG_CHUNK = 4_000n;
+
+/**
+ * One event's logs since the deployment's start block: scanned once in chunks the RPC accepts, then only
+ * the new blocks on each call. Callers filter in memory.
+ */
+class LogCache<T> {
+  private readonly logs: T[] = [];
+  private running?: Promise<T[]>;
+  constructor(
+    private readonly latest: () => Promise<bigint>,
+    private readonly fetch: (fromBlock: bigint, toBlock: bigint) => Promise<T[]>,
+    private next: bigint,
+  ) {}
+
+  all(): Promise<T[]> {
+    return (this.running ??= this.catchUp().finally(() => (this.running = undefined)));
+  }
+
+  private async catchUp() {
+    const latest = await this.latest();
+    while (this.next <= latest) {
+      const ranges: [bigint, bigint][] = [];
+      for (let f = this.next; f <= latest && ranges.length < 6; f += LOG_CHUNK) ranges.push([f, f + LOG_CHUNK - 1n < latest ? f + LOG_CHUNK - 1n : latest]);
+      for (const got of await Promise.all(ranges.map(([a, b]) => this.fetch(a, b)))) this.logs.push(...got);
+      this.next = ranges.at(-1)![1] + 1n;
+    }
+    return this.logs;
+  }
+}
+
+function logCaches(rt: Runtime) {
+  const pub = rt.chain.public;
+  const d = rt.chain.d;
+  const latest = () => pub.getBlockNumber({ cacheTime: 0 });
+  return {
+    issued: new LogCache(latest, (fromBlock, toBlock) => pub.getLogs({ address: d.licences, event: licenceIssued, fromBlock, toBlock }), rt.startBlock),
+    paid: new LogCache(latest, (fromBlock, toBlock) => pub.getLogs({ address: d.settlement, event: paymentRecorded, fromBlock, toBlock }), rt.startBlock),
+    anchored: new LogCache(latest, (fromBlock, toBlock) => pub.getLogs({ address: d.settlement, event: renderAnchored, fromBlock, toBlock }), rt.startBlock),
+  };
+}
+const cachesOf = new WeakMap<Runtime, ReturnType<typeof logCaches>>();
+const logsOf = (rt: Runtime) => cachesOf.get(rt) ?? (cachesOf.set(rt, logCaches(rt)), cachesOf.get(rt)!);
+const sameAddr = (a: string | undefined, b: string | undefined) => !b || (!!a && a.toLowerCase() === b.toLowerCase());
+
 /** Licences by creator or licensee, with their current on-chain status. */
 export async function listLicences(rt: Runtime, by: { creator?: Address; licensee?: Address }) {
-  const logs = await rt.chain.public.getLogs({
-    address: rt.chain.d.licences,
-    event: licenceIssued,
-    args: { creator: by.creator, licensee: by.licensee },
-    fromBlock: rt.startBlock,
-    toBlock: "latest",
-  });
+  const logs = (await logsOf(rt).issued.all()).filter((l) => sameAddr(l.args.creator, by.creator) && sameAddr(l.args.licensee, by.licensee));
   return Promise.all(
     logs.map(async (l) => {
       const id = l.args.id!;
@@ -290,12 +330,8 @@ const renderAnchored = parseAbiItem("event RenderAnchored(uint256 indexed licenc
 
 /** Payments recorded on chain (optionally for one licence and render), with their receipts. */
 export async function listPayments(rt: Runtime, filter: { licenceIds?: Set<string>; licenceId?: bigint; renderIndex?: number } = {}) {
-  const base = { address: rt.chain.d.settlement, fromBlock: rt.startBlock, toBlock: "latest" as const };
-  const args = filter.licenceId !== undefined ? { licenceId: filter.licenceId, renderIndex: filter.renderIndex } : undefined;
-  const [paid, anchored] = await Promise.all([
-    rt.chain.public.getLogs({ ...base, event: paymentRecorded, args }),
-    rt.chain.public.getLogs({ ...base, event: renderAnchored, args }),
-  ]);
+  const one = (a: { licenceId?: bigint; renderIndex?: number }) => filter.licenceId === undefined || (a.licenceId === filter.licenceId && (filter.renderIndex === undefined || a.renderIndex === filter.renderIndex));
+  const [paid, anchored] = await Promise.all([logsOf(rt).paid.all(), logsOf(rt).anchored.all()]).then(([p, a]) => [p.filter((l) => one(l.args)), a.filter((l) => one(l.args))] as const);
   const receipts = new Map(anchored.map((a) => [`${a.args.licenceId}-${a.args.renderIndex}`, a]));
   return paid
     .filter((p) => !filter.licenceIds || filter.licenceIds.has(String(p.args.licenceId)))
