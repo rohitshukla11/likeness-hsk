@@ -9,7 +9,7 @@
   <body>
     <main>
       <h1>Brand console</h1>
-      <p class="lede">
+      <p class="lede" id="lede">
         The brand's payment agent. It asks the creator's agent for each render's payment conditions (an AP2 Cart Mandate), checks
         them against the brand's policy and the chain, signs a Payment Mandate with the brand wallet, and the HSP Gateway executes
         the payment on HSK Chain.
@@ -40,7 +40,7 @@
         </div>
         <div class="panel">
           <div class="tabs"><button class="ghost" id="tab-steps">This render, step by step</button><button class="ghost" id="tab-log">Full message log</button></div>
-          <div id="steps"><p class="note">Pay for a render to see each step: A2A request → Cart Mandate → policy check → Payment Mandate → HSP Gateway → on-chain payment → recorded → receipt.</p></div>
+          <div id="steps"><p class="note" id="steps-hint">Pay for a render to see each step: A2A request → Cart Mandate → policy check → Payment Mandate → HSP Gateway → on-chain payment → recorded → receipt.</p></div>
           <div class="log" id="log" hidden></div>
         </div>
       </div>
@@ -49,6 +49,12 @@
       import { api, header, esc, txLink, addrLink, startLog, saveBlob, timeline, AGENTIC_STEPS } from "/static/app.js";
       const s = await api("/api/state");
       header("/brand", s);
+      if (s.agentic) {
+        document.querySelector("#lede").textContent =
+          "The brand's payment agent, paying through HSP Agentic Payment (MCP). For each render: the creator's agent creates the HSP order → the brand's agent checks it against the brand's policy and the chain, and prepares the payment → you approve → the brand wallet signs exactly what HSP returned → the payment is finalized → you approve again → it is submitted → HSP reports its status → the creator's agent records it on HSK Chain.";
+        document.querySelector("#steps-hint").textContent =
+          "Pay for a render to see each step: HSP order → policy check → quote → your approval → signature → your approval → submission → HSP status → recorded on chain → receipt.";
+      }
       startLog(document.querySelector("#log"));
       const stepsEl = document.querySelector("#steps");
       const logEl = document.querySelector("#log");
@@ -70,15 +76,19 @@
         document.querySelector("#opnote").textContent = "Operator actions are off on this server; the log, payments and Verify still work.";
       }
       const result = document.querySelector("#result");
+      // Newest licence first; earlier ones fold behind a toggle (nothing is removed).
+      let showEarlier = false;
       async function showLicences() {
-        const list = await api("/api/licences?who=brand");
+        const all = (await api("/api/licences?who=brand")).sort((a, b) => (BigInt(b.id) > BigInt(a.id) ? 1 : -1));
+        const list = showEarlier ? all : all.slice(0, 1);
+        const more = all.length > 1 ? `<tr><td colspan="4"><button class="ghost" data-earlier>${showEarlier ? "Hide earlier licences" : `Show earlier licences (${all.length - 1})`}</button></td></tr>` : "";
         document.querySelector("#licences").innerHTML = list.length
           ? list
               .map(
                 (l) =>
                   `<tr><td>${esc(l.id)}</td><td><span class="pill ${esc(l.status)}">${esc(l.status)}</span></td><td>${l.renderCount} / ${l.renderCap}</td><td><button class="ghost" data-pay="${esc(l.id)}" ${s.operator ? "" : "disabled"}>Pay for next render</button></td></tr>`,
               )
-              .join("")
+              .join("") + more
           : `<tr><td colspan="4" class="note">No licences yet.</td></tr>`;
       }
       async function showPayments() {
@@ -145,7 +155,7 @@
           recorded: "Paid and recorded on chain. Rendering…",
           delivered: `Render ${j.renderIndex} of licence ${esc(j.licenceId)}: paid, recorded and delivered.`,
           "paid-not-recorded": "Paid through HSP.",
-          refused: `Refused: ${esc(j.error)}`,
+          refused: /^Refused/.test(j.error ?? "") ? esc(j.error) : `Refused: ${esc(j.error)}`,
           failed: `Failed: ${esc(j.error)}`,
         }[j.state];
         const facts = j.flowId
@@ -164,6 +174,10 @@
         }
       });
       document.querySelector("#licences").addEventListener("click", (ev) => {
+        if (ev.target?.dataset?.earlier !== undefined) {
+          showEarlier = !showEarlier;
+          return showLicences();
+        }
         const id = ev.target?.dataset?.pay;
         if (!id) return;
         busy(ev.target, async () => {

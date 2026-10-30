@@ -145,7 +145,7 @@ export class BrandAgent {
     const me = this.c.account.address;
     const [l, status] = await Promise.all([ch.licence(licenceId), ch.status(licenceId)]);
     if (!same(l.licensee, me)) throw new Refused(`licence ${licenceId} is not held by this brand`);
-    if (status !== "Active") return this.refuse(`licence ${licenceId} is ${status.toLowerCase()}: not paying`);
+    if (status !== "Active") return this.refuse(`Refused before anything was signed: licence ${licenceId} is ${status.toLowerCase()}. No order, no signature, no payment.`);
 
     const task = await this.ask(conn, { skill: SKILL_RENDER_PAYMENT, licenceId: licenceId.toString() });
     if (task.status.state !== "completed") return this.refuse(`creator agent ${task.status.state}: ${textOf(task.status.message ?? { parts: [] })}`);

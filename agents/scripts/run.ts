@@ -146,7 +146,7 @@ run: try {
     console.log("UNEXPECTED: paid after revocation");
     process.exitCode = 1;
   } catch (e) {
-    console.log(`after revocation: ${e instanceof Refused ? "refused before paying" : "error"}: ${(e as Error).message}`);
+    console.log(`after revocation: ${e instanceof Refused ? "" : "error: "}${(e as Error).message}`);
   }
   for (const e of rt.log.since(fromSeq).filter((x) => x.kind === "tx" && (x.data as { tx?: string }).tx?.startsWith("0x"))) {
     console.log(`  log: ${e.summary}  ${link((e.data as { tx: string }).tx)}`);
