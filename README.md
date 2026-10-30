@@ -196,8 +196,12 @@ sequenceDiagram
   TestUSDT, which has no value. On mainnet, HSP's own USDT is used.
 - **Amount and recipient** are attested by the creator's agent, not proven on chain (see above).
 - **Renders:** a marked TEST RENDER by default. Gemini renders only when an API key is set.
-- **The demo creator is synthetic** (a generated face), attested by our own attester, not a KYC
-  provider.
+- **No C2PA in this build:** the earlier Likeness projects signed a C2PA content credential into each
+  render; this build drops it (a native module, and little value on SVG test renders). Verify relies on the
+  on-chain receipt keyed by the file's sha256, anchored only after the HSP payment was recorded.
+- **The demo creator is synthetic:** Ana Reyes's face is a flat vector illustration drawn for this project
+  (`web/public/demo/ana-reyes.svg`), not a photo of anyone; she is attested by our own attester, not a KYC
+  provider. The landing page uses that illustration and neutral silhouettes only.
 - **Single instance:** one process holds the agents' state. A production deployment would use a
   persistent store.
 
