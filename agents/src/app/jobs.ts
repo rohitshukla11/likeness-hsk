@@ -44,7 +44,11 @@ export function hspStatuses(log: MessageLog, flowId: string | undefined) {
 
 export class PaymentJobs {
   readonly jobs = new Map<string, PaymentJob>();
-  constructor(private readonly rt: Runtime) {}
+  /** onSubmitted: called once per payment handed to HSP (the public app's daily cap counts these). */
+  constructor(
+    private readonly rt: Runtime,
+    private readonly onSubmitted?: () => void,
+  ) {}
 
   start(licenceId: bigint, brief: string): PaymentJob {
     const job: PaymentJob = { id: randomUUID(), licenceId: licenceId.toString(), state: "paying", startedAt: Date.now() };
@@ -60,6 +64,7 @@ export class PaymentJobs {
     const rt = this.rt;
     const paid = await rt.brand.payForRender(await rt.connect(), id);
     Object.assign(job, { state: "submitted", renderIndex: paid.renderIndex, flowId: paid.flowId, paymentRequestId: paid.paymentRequestId, tokenTotalRaw: paid.tokenTotalRaw });
+    this.onSubmitted?.();
 
     if (rt.agentic) {
       // HSP's statuses, until safe, finalized or failed (the creator's agent queries every 15 s).

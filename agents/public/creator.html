@@ -21,6 +21,7 @@
         </div>
         <div class="panel">
           <h2>Licences</h2>
+          <p class="note" id="opnote"></p>
           <table>
             <thead><tr><th>#</th><th>licensee</th><th>status</th><th>renders</th><th></th></tr></thead>
             <tbody id="licences"></tbody>
@@ -38,9 +39,10 @@
       </div>
     </main>
     <script type="module">
-      import { api, header, esc, txLink, addrLink } from "/static/app.js";
+      import { api, header, esc, txLink, addrLink, operatorGate } from "/static/app.js";
       const s = await api("/api/state");
       header("/creator", s);
+      operatorGate(document.querySelector("#opnote"), s);
       const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
       const cats = (bits) => ["advertising", "social", "editorial", "entertainment", "product"].filter((_, i) => bits & (1 << (8 + i))).join(", ");
       document.querySelector("#terms").innerHTML =

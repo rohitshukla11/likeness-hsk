@@ -32,7 +32,7 @@ export class Budget {
   private day = "";
   private spent = 0n;
 
-  constructor(private readonly policy: BrandPolicy, private readonly now: () => Date = () => new Date()) {}
+  constructor(readonly policy: BrandPolicy, private readonly now: () => Date = () => new Date()) {}
 
   private roll() {
     const d = this.now().toISOString().slice(0, 10);

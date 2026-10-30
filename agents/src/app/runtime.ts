@@ -63,7 +63,8 @@ function pickRenderer(): { name: "gemini" | "test"; renderer: Renderer } {
   };
 }
 
-const POLICY = { maxPricePerRender: 100_000n, allowedCategories: ADVERTISING, dailyBudget: 1_000_000n, maxRendersPerLicence: 5 };
+// 0.05 USDT a render at most and 0.50 USDT a day: ten paid renders a day.
+export const POLICY = { maxPricePerRender: 50_000n, allowedCategories: ADVERTISING, dailyBudget: 500_000n, maxRendersPerLicence: 5 };
 
 /**
  * local: a devnet with throwaway keys (nothing leaves the machine).
@@ -154,7 +155,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
         chain: chain.chain,
         rpcUrl: d.rpcUrl,
         publicClient: pub,
-        executor: key("deployer"),
+        executor: key(process.env.LIKENESS_EXECUTOR_KEY ?? "deployer"),
         network: d.hspNetwork,
         token: { address: d.token, decimals: 6, symbol: d.tokenSymbol, protocol: d.rail },
         permit2: d.permit2,
@@ -181,7 +182,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
       throw new Error("mainnet needs real HSP credentials (.secrets/hsp/credentials.json); the emulator is never used on mainnet");
     }
     if (process.env.LIKENESS_RPC_URL) rpcFor("mainnet"); // throws unless it is a local fork
-    const executor = key("deployer");
+    const executor = key(process.env.LIKENESS_EXECUTOR_KEY ?? "deployer");
     emulator = new HspGatewayEmulator({ chain: chain.chain, rpcUrl: d.rpcUrl, publicClient: pub, executor, nonceMode: "payer" });
     emulator.permit2 = d.permit2;
     hspBase = await emulator.start();

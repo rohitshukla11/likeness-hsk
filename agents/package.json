@@ -17,6 +17,7 @@
     "testnet": "tsx scripts/run.ts --network testnet",
     "app": "tsx src/app/server.ts",
     "fund": "tsx scripts/fund.ts",
+    "vm": "tsx scripts/vm.ts",
     "recover": "tsx scripts/recover-payment.ts",
     "hsp:check": "tsx scripts/hsp-check.ts",
     "hsp:agentic": "tsx scripts/hsp-agentic.ts",

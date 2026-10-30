@@ -7,6 +7,33 @@ export async function api(path, body) {
 }
 
 export const $ = (sel) => document.querySelector(sel);
+
+// Operator actions: on this machine, or on the public server with the demo password the team shares
+// with judges. Verify and the read-only views never need it.
+export function operatorGate(el, state) {
+  if (state.operator && state.login) {
+    el.innerHTML = `Operator actions unlocked for this browser. <a href="#" id="op-out">Lock</a>`;
+    el.querySelector("#op-out").onclick = async (ev) => {
+      ev.preventDefault();
+      await api("/api/logout", {});
+      location.reload();
+    };
+  } else if (!state.operator && state.login) {
+    el.innerHTML = `<form id="op-in">Operator actions (license, pay, approve, revoke) need the demo password the team shared with judges; Verify and every read-only view are open to everyone.
+      <span style="display: block; margin-top: 8px"><input type="password" id="op-pw" autocomplete="current-password" placeholder="demo password" /> <button>Unlock</button> <span id="op-err" class="err"></span></span></form>`;
+    el.querySelector("#op-in").onsubmit = async (ev) => {
+      ev.preventDefault();
+      try {
+        await api("/api/login", { password: el.querySelector("#op-pw").value });
+        location.reload();
+      } catch (e) {
+        el.querySelector("#op-err").textContent = e.message;
+      }
+    };
+  } else if (!state.operator) {
+    el.textContent = "Operator actions are off on this server; the log, payments and Verify still work.";
+  }
+}
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 export const short = (h) => (h && h.length > 14 ? `${h.slice(0, 8)}…${h.slice(-6)}` : h || "");
 

@@ -3,7 +3,8 @@
 //   pnpm app                       testnet (chain 133) when deployments/testnet.json exists, else local
 //   LIKENESS_MODE=local pnpm app   a devnet with throwaway keys and the emulated HSP Gateway
 // Operator actions (license, pay, revoke) are on only with LIKENESS_OPERATOR=1 (the default for local
-// and testnet) and only from this machine.
+// and testnet) and only from this machine; or, with LIKENESS_PUBLIC=1 (the public server behind Caddy),
+// from anyone holding the demo password (see guard.ts: rate limits, one payment at a time, a daily cap).
 import { existsSync, readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize } from "node:path";
@@ -16,6 +17,8 @@ import { claimMessage, ClaimError, verifyClaim } from "./claim.js";
 import { MERCHANT_NAME } from "../hsp/agentic/client.js";
 import { hspStatuses, PaymentJobs } from "./jobs.js";
 import { ADVERTISING, listLicences, listPayments, startRuntime, type Mode, type Runtime } from "./runtime.js";
+import { clientIp, guardFromEnv, type Guard } from "./guard.js";
+import { deploymentsDir } from "../chain/networks.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const publicDir = fileURLToPath(new URL("../../public/", import.meta.url));
@@ -23,6 +26,7 @@ const mode = (process.env.LIKENESS_MODE ?? (existsSync(`${root}deployments/testn
 const port = Number(process.env.PORT ?? 8788);
 const operator = (process.env.LIKENESS_OPERATOR ?? (mode === "mainnet" ? "0" : "1")) === "1";
 const publicUrl = process.env.PUBLIC_URL ?? `http://127.0.0.1:${port}`;
+const publicGuard = guardFromEnv(`${deploymentsDir(root)}/${mode}-paid-today.json`);
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
 const PAGES: Record<string, string> = { "/": "index.html", "/brand": "brand.html", "/creator": "creator.html", "/verify": "verify.html", "/agent": "agent.html" };
@@ -36,12 +40,24 @@ const json = (res: ServerResponse, status: number, body: unknown) => sendJson(re
 
 /** One set of payment jobs per runtime. */
 const jobsOf = new WeakMap<Runtime, PaymentJobs>();
-const jobs = (rt: Runtime) => jobsOf.get(rt) ?? (jobsOf.set(rt, new PaymentJobs(rt)), jobsOf.get(rt)!);
+const jobs = (rt: Runtime, guard?: Guard) => jobsOf.get(rt) ?? (jobsOf.set(rt, new PaymentJobs(rt, guard && (() => guard.cap.add()))), jobsOf.get(rt)!);
 
-export async function handle(rt: Runtime, req: IncomingMessage, res: ServerResponse) {
+const parse = (raw: string) => {
+  try {
+    return JSON.parse(raw || "{}") as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+};
+
+export async function handle(rt: Runtime, req: IncomingMessage, res: ServerResponse, guard: Guard | undefined = publicGuard) {
   const url = new URL(req.url ?? "/", "http://x");
   const path = url.pathname;
+  const ip = guard ? clientIp(req) : "";
+  if (guard && !guard.reads.allow(ip)) return json(res, 429, { error: "too many requests from this address; try again in a minute" });
   const raw = req.method === "POST" ? await readBody(req) : "";
+  // The operator: this machine, or (public server) a session from the demo password.
+  const isOperator = rt.operator && (guard ? guard.auth.check(req) : isLocal(req));
 
   // ---------------------------------------------------------------- the creator agent (public)
   if (req.method === "GET" && path === "/.well-known/agent-card.json") return json(res, 200, rt.creatorAgent.card());
@@ -50,6 +66,20 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
     const sig = req.headers["x-signature"];
     const r = rt.creatorAgent.handleWebhook(raw, Array.isArray(sig) ? sig[0] : sig);
     return json(res, r.status, r.body);
+  }
+
+  // ---------------------------------------------------------------- the demo password (public server)
+  if (req.method === "POST" && (path === "/api/login" || path === "/api/logout")) {
+    if (!guard) return json(res, 404, { error: "not found" });
+    if (path === "/api/logout") {
+      res.setHeader("set-cookie", guard.auth.logout());
+      return json(res, 200, { ok: true });
+    }
+    if (!guard.logins.allow(ip)) return json(res, 429, { error: "too many attempts; try again in a minute" });
+    const cookie = guard.auth.login(String(parse(raw).password ?? ""));
+    if (!cookie) return json(res, 401, { error: "wrong demo password" });
+    res.setHeader("set-cookie", cookie);
+    return json(res, 200, { ok: true });
   }
 
   // ---------------------------------------------------------------- pages and assets
@@ -72,7 +102,11 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
       mode: rt.mode,
       gateway: rt.gateway,
       renderer: rt.renderer,
-      operator: rt.operator && isLocal(req),
+      operator: isOperator,
+      // The public server asks for the demo password; caps are shown so nobody is surprised by a refusal.
+      login: guard ? { required: true } : null,
+      policy: { maxPricePerRender: usdValue(rt.brand.budget.policy.maxPricePerRender), dailyBudget: usdValue(rt.brand.budget.policy.dailyBudget) },
+      cap: guard ? { max: guard.cap.max, paidToday: guard.cap.count() } : null,
       chainId: d.chainId,
       explorer: d.explorer ?? null,
       contracts: { creators: d.creators, licences: d.licences, receipts: d.receipts, settlement: d.settlement, token: d.token },
@@ -163,21 +197,27 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
 
   // ---------------------------------------------------------------- operator actions (this machine only)
   if (path.startsWith("/api/brand/") || path.startsWith("/api/creator/")) {
-    if (!rt.operator || !isLocal(req)) return json(res, 403, { error: "operator actions are off on this server" });
+    if (!rt.operator) return json(res, 403, { error: "operator actions are off on this server" });
+    if (!isOperator) return json(res, guard ? 401 : 403, { error: guard ? "operator actions need the demo password" : "operator actions are off on this server" });
+    if (guard && req.method === "POST" && !guard.actions.allow(ip)) return json(res, 429, { error: "too many operator actions from this address; try again in a minute" });
     const body = JSON.parse(raw || "{}") as Record<string, string>;
     try {
       if (req.method === "POST" && path === "/api/brand/license") {
         const conn = await rt.connect();
-        const id = await rt.brand.license(conn, { category: ADVERTISING, regions: 1, durationSeconds: 7n * 86400n, renderCap: Number(body.renderCap ?? 3), purpose: body.purpose ?? "demo campaign" });
+        const id = await rt.brand.license(conn, { category: ADVERTISING, regions: 1, durationSeconds: BigInt(body.durationSeconds ?? 7 * 86400), renderCap: Number(body.renderCap ?? 3), purpose: body.purpose ?? "demo campaign" });
         return json(res, 200, { licenceId: id.toString() });
       }
       if (req.method === "POST" && path === "/api/brand/pay") {
         // Runs in the background: the console polls the job, shows the approvals and HSP's statuses.
-        const job = jobs(rt).start(BigInt(body.licenceId ?? "0"), body.brief ?? "demo ad");
+        if (guard) {
+          if ([...jobs(rt, guard).jobs.values()].some((j) => j.state === "paying")) return json(res, 409, { error: "another payment is in progress; try again when it finishes" });
+          if (guard.cap.count() >= guard.cap.max) return json(res, 429, { error: `today's cap is reached: ${guard.cap.max} paid renders a day (UTC)` });
+        }
+        const job = jobs(rt, guard).start(BigInt(body.licenceId ?? "0"), body.brief ?? "demo ad");
         return json(res, 200, { jobId: job.id, fromSeq: rt.log.events.at(-1)?.seq ?? 0 });
       }
       if (req.method === "GET" && path === "/api/brand/job") {
-        const job = jobs(rt).jobs.get(url.searchParams.get("id") ?? "");
+        const job = jobs(rt, guard).jobs.get(url.searchParams.get("id") ?? "");
         if (!job) return json(res, 404, { error: "no such payment" });
         const statuses = hspStatuses(rt.log, job.flowId);
         const last = statuses.at(-1);
@@ -225,7 +265,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     handle(rt, req, res).catch((e) => json(res, 500, { error: (e as Error).message.split("\n")[0] }));
   });
   server.listen(port, "127.0.0.1", () => {
-    console.log(`Likeness app (${mode}, gateway: ${rt.gateway}, operator: ${operator}) on ${publicUrl}`);
+    console.log(`Likeness app (${mode}, gateway: ${rt.gateway}, operator: ${operator}${publicGuard ? ", public: demo password, rate limits, daily cap" : ""}) on ${publicUrl}`);
   });
   const stop = () => {
     server.close();

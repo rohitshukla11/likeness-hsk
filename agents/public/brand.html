@@ -46,7 +46,7 @@
       </div>
     </main>
     <script type="module">
-      import { api, header, esc, txLink, addrLink, startLog, saveBlob, timeline, AGENTIC_STEPS } from "/static/app.js";
+      import { api, header, esc, txLink, addrLink, startLog, saveBlob, timeline, operatorGate, AGENTIC_STEPS } from "/static/app.js";
       const s = await api("/api/state");
       header("/brand", s);
       if (s.agentic) {
@@ -66,15 +66,14 @@
         const st = await api("/api/state");
         document.querySelector("#who").innerHTML =
           row("wallet", addrLink(st, st.brand)) +
-          row("policy", `≤ 0.10 ${esc(st.token)} per render · advertising only · 1.00 ${esc(st.token)} a day`) +
+          row("policy", `≤ ${esc(st.policy.maxPricePerRender)} ${esc(st.token)} per render · advertising only · ${esc(st.policy.dailyBudget)} ${esc(st.token)} a day`) +
+          (st.cap ? row("paid today", `${st.cap.paidToday} of ${st.cap.max} renders (this server's daily cap, UTC)`) : "") +
           row("spent today", `${usd(st.spentToday)} ${esc(st.token)} (this session)`) +
           row("creator's price", `${esc(st.terms.price)} ${esc(st.token)} per render`);
       };
       await showWho();
-      if (!s.operator) {
-        document.querySelector("#license").disabled = true;
-        document.querySelector("#opnote").textContent = "Operator actions are off on this server; the log, payments and Verify still work.";
-      }
+      if (!s.operator) document.querySelector("#license").disabled = true;
+      operatorGate(document.querySelector("#opnote"), s);
       const result = document.querySelector("#result");
       // Newest licence first; earlier ones fold behind a toggle (nothing is removed).
       let showEarlier = false;

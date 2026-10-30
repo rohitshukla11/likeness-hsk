@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { privateKeyToAccount } from "viem/accounts";
 import { afterAll, describe, expect, it } from "vitest";
-import { decryptKeystore } from "../src/keys.js";
+import { decryptKeystore, encryptKeystore } from "../src/keys.js";
+import { generatePrivateKey } from "viem/accounts";
 import { foundryBin } from "../src/dev/foundry.js";
 
 const cast = foundryBin("cast");
@@ -26,5 +27,13 @@ describe("keystores (cast wallet new)", () => {
 
   it("refuses a wrong password", () => {
     expect(() => decryptKeystore(readFileSync(join(dir, "throwaway"), "utf8"), "wrong")).toThrow("wrong keystore password");
+  });
+
+  it("writes a keystore it (and cast's format) can read back, only with the right password", () => {
+    const pk = generatePrivateKey();
+    const ks = encryptKeystore(pk, password);
+    expect(ks).not.toContain(pk.slice(2));
+    expect(decryptKeystore(ks, password)).toBe(pk);
+    expect(() => decryptKeystore(ks, "wrong")).toThrow("wrong keystore password");
   });
 });

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { claimMessage } from "../src/app/claim.js";
 import { startRuntime, type Runtime } from "../src/app/runtime.js";
 import { handle } from "../src/app/server.js";
+import { DailyCap, OperatorAuth, RateLimit, type Guard } from "../src/app/guard.js";
 import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -175,3 +176,81 @@ describe("the app server with HSP Agentic Payment (local devnet, MCP emulator)",
   });
 });
 
+
+describe("the public server: demo password, rate limits, daily cap (local devnet)", () => {
+  let rt: Runtime;
+  let server: Server;
+  let base = "";
+  const root = `${mkdtempSync(join(tmpdir(), "likeness-app-"))}/`;
+  const PASSWORD = "correct horse battery staple";
+  const guard: Guard = { auth: new OperatorAuth(PASSWORD), reads: new RateLimit(10_000), actions: new RateLimit(1000), logins: new RateLimit(5), cap: new DailyCap(`${root}paid-today.json`, 1) };
+  let cookie = "";
+  const post = (path: string, body: unknown, withCookie = true) =>
+    fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", ...(withCookie && cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
+  const get = (path: string) => fetch(`${base}${path}`, { headers: cookie ? { cookie } : {} });
+
+  beforeAll(async () => {
+    mkdirSync(`${root}renders`, { recursive: true });
+    server = createServer((req, res) => void handle(rt, req, res, guard));
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    const a = server.address();
+    base = `http://127.0.0.1:${typeof a === "object" && a ? a.port : 0}`;
+    rt = await startRuntime({ mode: "local", root, publicUrl: base, operator: true });
+  });
+  afterAll(() => {
+    server?.close();
+    rt?.stop();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("without the password: every page and read-only view works; operator calls are refused with 401", async () => {
+    for (const p of ["/", "/brand", "/creator", "/verify", "/agent", "/.well-known/agent-card.json", "/api/licences?who=brand", "/api/payments?who=brand"]) expect((await get(p)).status).toBe(200);
+    expect((await get(`/api/verify?hash=0x${"00".repeat(32)}`)).status).toBe(200);
+    const s = await (await get("/api/state")).json();
+    expect(s).toMatchObject({ operator: false, login: { required: true }, cap: { max: 1, paidToday: 0 }, policy: { maxPricePerRender: "0.10", dailyBudget: "1.00" } });
+    for (const [path, body] of [["/api/brand/license", {}], ["/api/brand/pay", { licenceId: "1" }], ["/api/brand/approve", { id: "x", decision: "approve" }], ["/api/creator/revoke", { licenceId: "1" }], ["/api/brand/download", { assetHash: "0x" }]] as const) {
+      expect((await post(path, body)).status).toBe(401);
+    }
+    expect((await get("/api/brand/job?id=x")).status).toBe(401);
+  });
+
+  it("a wrong password is refused; the right one gives an HttpOnly, Secure, SameSite=Strict session", async () => {
+    expect((await post("/api/login", { password: "guess" })).status).toBe(401);
+    const r = await post("/api/login", { password: PASSWORD });
+    expect(r.status).toBe(200);
+    const set = r.headers.get("set-cookie") ?? "";
+    expect(set).toMatch(/HttpOnly/);
+    expect(set).toMatch(/Secure/);
+    expect(set).toMatch(/SameSite=Strict/);
+    cookie = set.split(";")[0]!;
+    expect((await (await get("/api/state")).json()).operator).toBe(true);
+    // A tampered session is not one.
+    const forged = cookie.replace(/.$/, (c) => (c === "A" ? "B" : "A"));
+    expect((await fetch(`${base}/api/brand/job?id=x`, { headers: { cookie: forged } })).status).toBe(401);
+  });
+
+  it("with the session: one paid render; then the daily cap refuses the next before anything starts", async () => {
+    const { licenceId } = await (await post("/api/brand/license", { renderCap: 3 })).json();
+    const { jobId } = await (await post("/api/brand/pay", { licenceId })).json();
+    let r;
+    for (;;) {
+      r = await (await get(`/api/brand/job?id=${jobId}`)).json();
+      if (["delivered", "paid-not-recorded", "refused", "failed"].includes(r.job.state)) break;
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    expect(r.job.state).toBe("delivered");
+    expect(guard.cap.count()).toBe(1);
+    const again = await post("/api/brand/pay", { licenceId });
+    expect(again.status).toBe(429);
+    expect((await again.json()).error).toMatch(/cap/);
+  });
+
+  it("logging out ends the session; repeated login attempts from one address are rate limited", async () => {
+    const out = await post("/api/logout", {});
+    expect(out.headers.get("set-cookie")).toMatch(/Max-Age=0/);
+    cookie = "";
+    const codes = [];
+    for (let i = 0; i < 5; i++) codes.push((await post("/api/login", { password: "guess" })).status);
+    expect(codes.at(-1)).toBe(429);
+  });
+});
