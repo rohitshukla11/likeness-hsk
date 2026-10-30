@@ -21,15 +21,24 @@ What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 The full app, running on HSK Chain testnet (chain 133) with HSP Agentic Payment through our offline MCP
 emulator until HashKey's QA server allowlists this server's address (35.254.5.116); the banner says which.
 
-- **Open to everyone:** the overview, the creator's terms and licences, payments with explorer links,
-  **Verify** (drop a file: Licensed, Expired, Revoked or Unknown) and the creator agent's A2A card.
-- **Operator actions** (take a licence, pay for a render with the two approvals, revoke): unlock them on the
-  Brand console or Creator page with the **demo password**. It is not in this repository; judges get it from
-  the team with the submission (ask us if you don't have it).
+The walk-through: **Creators → Ana Reyes → Request licence → Brand → Pay for next render → approval 1
+(before signing) → approval 2 (before submitting) → HSP status, recorded, receipt → Download → Verify →
+Creator dashboard → Revoke → Pay again (refused before anything is signed) → Verify (Revoked)**.
+"Behind the scenes" on the Brand page shows every A2A message, mandate and HSP call. The original console
+is at [/console](https://35-254-5-116.sslip.io/console).
+
+- **Open to everyone:** the landing page, the creator's terms and licences, payments with explorer links,
+  **Verify** (drop a file: Licensed, Expired, Revoked or Unknown), How it works and the creator agent's A2A card.
+- **Operator actions** (request a licence, pay for a render with the two approvals, revoke): unlock them
+  with the **demo password** at the top right. It is not in this repository; judges get it from the team with
+  the submission (ask us if you don't have it).
 - **Limits:** at most 10 paid renders a day (UTC), 0.05 test USDT each, one payment at a time, per-address
   rate limits. Everything is testnet: the tokens have no value.
 - The server has its own testnet-only wallets (creator `0xD2925E4A…29ca9`, brand `0x8E9B246D…4DDec`);
   its keystores are encrypted and their password lives in Google Secret Manager.
+
+The web UI (`web/`, Next.js) was rebuilt during the hackathon from the design of Rohit's earlier
+Likeness project; what is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 
 ## Live on HSK Chain testnet (chain 133)
 
@@ -197,18 +206,20 @@ sequenceDiagram
 ```sh
 git clone --recurse-submodules https://github.com/rohitshukla11/likeness-hsk && cd likeness-hsk
 (cd contracts && forge build && forge test)            # 79 contract tests; fork suites run with HSK_RPC_URL / HSK_TESTNET_RPC_URL
-cd agents && pnpm install && pnpm test                 # 59 agent tests (anvil from Foundry needed)
+cd agents && pnpm install && pnpm test                 # 64 agent tests (anvil from Foundry needed)
 LIKENESS_MODE=local pnpm app                           # http://127.0.0.1:8788: a local chain, no keys needed
 LIKENESS_HSP=agentic LIKENESS_MODE=local pnpm app      # the same with HSP Agentic Payment (MCP emulator) and the approvals
-pnpm run vm keys && pnpm run vm setup                 # the public server's own testnet wallets (dry run; --broadcast sends)
+pnpm run vm keys && pnpm run vm setup                  # the public server's own testnet wallets (dry run; --broadcast sends)
+cd ../web && pnpm install && pnpm dev                  # the web UI on http://localhost:3000, over the agents app on 8788
 ```
 
-**Pages:**
-- **Brand console:** take a licence, pay for a render, and watch each step: A2A request → Cart
-  Mandate → policy check → Payment Mandate → HSP Gateway → payment → recorded → receipt, with explorer
-  links.
-- **Creator:** terms, licences, payments received, revoke.
-- **Verify:** Licensed / Expired / Revoked / Unknown for any file.
+**Pages (web UI):**
+- **Creators** and **Ana Reyes**: her on-chain terms and the licence request.
+- **Brand:** pay for a render with the two approvals, HSP's status, each step with explorer links, the
+  download, and "Behind the scenes" (every A2A message, mandate and HSP call).
+- **Creator dashboard:** licences, payments received, revoke.
+- **Verify:** Licensed / Expired / Revoked / Unknown for any file. **How it works:** the flow and the contracts.
+- The original console (`agents/public`) is served at `/console` by the agents app.
 
 **Testnet run:** `pnpm run testnet` (needs the project's keystores).
 

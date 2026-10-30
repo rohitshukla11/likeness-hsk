@@ -8,6 +8,7 @@ const backend = process.env.LIKENESS_BACKEND ?? "http://127.0.0.1:8788";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  poweredByHeader: false,
   output: "standalone",
   images: { unoptimized: true },
   async rewrites() {
