@@ -1,6 +1,6 @@
 "use client";
 
-/** The app header: home mark, the destinations, the operator unlock; then the HSP mode banner. */
+/** The app header: home mark, the destinations, the operator Login; then the HSP mode banner. */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IconPerson } from "@/components/ds/icons";

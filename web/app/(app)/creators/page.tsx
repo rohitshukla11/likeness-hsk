@@ -1,6 +1,6 @@
 "use client";
 
-/** Creators: everyone a brand's agent can license on this deployment (one synthetic demo creator). */
+/** Creators: everyone a brand's agent can license on this deployment (one demo creator). */
 import { AppPage, Skeleton } from "@/components/ds";
 import { CreatorCard } from "@/components/market/CreatorCard";
 import { useAppState } from "@/components/site/AppState";

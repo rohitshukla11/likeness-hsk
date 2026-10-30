@@ -1,6 +1,6 @@
 "use client";
 
-/** The backend state for every app page, and a way to refresh it (after unlocking, paying, revoking). */
+/** The backend state for every app page, and a way to refresh it (after logging in, paying, revoking). */
 import { createContext, useContext, type ReactNode } from "react";
 import type { State } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";

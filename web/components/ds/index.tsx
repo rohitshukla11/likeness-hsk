@@ -281,7 +281,7 @@ export function CreatorFace({ seed, photo, size = 52, ring, label }: { seed: str
       {...(label ? { role: "img", "aria-label": label } : { "aria-hidden": true })}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={photo} alt="" width={size} height={size} className="h-full w-full object-cover" />
+      <img src={photo} alt="" width={size} height={size} className="h-full w-full object-cover object-top" />
     </span>
   );
 }

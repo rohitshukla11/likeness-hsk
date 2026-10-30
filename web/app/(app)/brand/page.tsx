@@ -103,7 +103,7 @@ function Brand() {
       {state && !operator && state.login && (
         <Card tone="lavender">
           <p className="m-0 text-[14px]">
-            Operator actions (request a licence, pay with the two approvals) need the <b>demo password</b> the team shared with judges: enter it at the top right.
+            Operator actions (request a licence, pay with the two approvals) need the <b>demo password</b> the team shared with judges: click Login at the top right.
             Everything else here, and Verify, is open to everyone.
           </p>
         </Card>

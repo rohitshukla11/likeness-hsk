@@ -199,9 +199,8 @@ sequenceDiagram
 - **No C2PA in this build:** the earlier Likeness projects signed a C2PA content credential into each
   render; this build drops it (a native module, and little value on SVG test renders). Verify relies on the
   on-chain receipt keyed by the file's sha256, anchored only after the HSP payment was recorded.
-- **The demo creator is synthetic:** Ana Reyes's face is a flat vector illustration drawn for this project
-  (`web/public/demo/ana-reyes.svg`), not a photo of anyone; she is attested by our own attester, not a KYC
-  provider. The landing page uses that illustration and neutral silhouettes only.
+- **One demo creator:** Ana Reyes is the demo creator on this deployment, attested by our own attester, not a
+  KYC provider. Her portrait and the landing photos are the ones from the earlier Likeness app (likeness-arc).
 - **Single instance:** one process holds the agents' state. A production deployment would use a
   persistent store.
 

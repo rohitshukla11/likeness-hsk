@@ -21,9 +21,9 @@ export type CardCreator = {
 export function CreatorCard({ c }: { c: CardCreator }) {
   return (
     <article aria-label={`Creator ${c.name}`} className="flex min-w-0 flex-col gap-3 rounded-[20px] bg-white p-3">
-      <div className="relative flex aspect-[4/5] items-end justify-center overflow-hidden rounded-[14px] bg-[#E3E6EC]">
+      <div className="relative flex aspect-[4/5] items-end justify-center overflow-hidden rounded-[14px] bg-[linear-gradient(160deg,#D4F06A_0%,#F2FAD6_100%)]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={c.photo} alt={`Illustrated portrait of ${c.name}, a synthetic demo creator`} className="absolute inset-0 h-full w-full object-cover object-top" />
+        <img src={c.photo} alt={`Portrait of ${c.name}`} className="absolute inset-0 h-full w-full object-cover object-top" />
         <span className="absolute left-2.5 top-2.5 rounded-full bg-ink px-2.5 py-1 text-[12px] font-semibold text-lime">{c.label}</span>
       </div>
 

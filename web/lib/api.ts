@@ -1,6 +1,6 @@
 /**
  * The agents backend (agents/src/app/server.ts), proxied by next.config.ts: types of what it returns and
- * small fetch helpers. Every call runs in the browser, with the operator session cookie when unlocked.
+ * small fetch helpers. Every call runs in the browser, with the operator session cookie when logged in.
  */
 
 export type Gateway = "hsp" | "emulator" | "hsp-agentic-qa" | "hsp-agentic-emulator";

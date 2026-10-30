@@ -40,9 +40,9 @@ export default function CreatorProfile() {
     <AppPage title={DEMO_CREATOR.name} description={DEMO_CREATOR.bio}>
       <div className="grid grid-cols-1 items-start gap-[18px] desk:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <div className="flex flex-col gap-[14px]">
-          <div className="relative aspect-[4/5] overflow-hidden rounded-[20px] bg-[#E3E6EC]">
+          <div className="relative aspect-[4/5] overflow-hidden rounded-[20px] bg-[linear-gradient(160deg,#D4F06A_0%,#F2FAD6_100%)]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={DEMO_CREATOR.photo} alt={`Illustrated portrait of ${DEMO_CREATOR.name}, a synthetic demo creator`} className="absolute inset-0 h-full w-full object-cover object-top" />
+            <img src={DEMO_CREATOR.photo} alt={`Portrait of ${DEMO_CREATOR.name}`} className="absolute inset-0 h-full w-full object-cover object-top" />
             <span className="absolute left-3 top-3 rounded-full bg-ink px-3 py-1 text-[12px] font-semibold text-lime">{DEMO_CREATOR.label}</span>
           </div>
           {state && (

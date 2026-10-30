@@ -2,17 +2,19 @@
 
 /**
  * The landing page (Main.dc.html): lime hero with dropping nav and headline, a rising portrait
- * illustration and two endless ribbons; the "Built on" strip; the dark benefits block with counters;
+ * and two endless ribbons; the "Built on" strip; the dark benefits block with counters;
  * the four-step accordion; the tilted, overlapping creator cards; the testimonial marquee (only with real quotes);
  * the CTA band. Motion is CSS plus an IntersectionObserver hook, and static under reduced motion.
  */
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { Avatar, pillClass, Silhouette, SILHOUETTES } from "@/components/ds";
+import { pillClass } from "@/components/ds";
 import { IconArrowLeft, IconArrowRight, IconChevron } from "@/components/ds/icons";
 import { useCountUp, useInView } from "@/components/ds/motion";
+import { OperatorGate } from "@/components/site/OperatorGate";
 import { BUILT_ON, MEASUREMENTS, TESTIMONIALS } from "@/lib/site-content";
+import { useBackend } from "@/lib/useBackend";
 
 
 const RIBBON_A = ["Advertising", "✳", "Social", "✳", "Editorial", "✳", "Entertainment", "✳", "Product", "✳"];
@@ -48,6 +50,7 @@ function Ribbon({ words, dir, className, style }: { words: string[]; dir: "l" | 
 }
 
 function Hero() {
+  const { state, refresh } = useBackend();
   return (
     <section className="relative overflow-hidden bg-[linear-gradient(160deg,#D4F06A_0%,#E4F7A0_38%,#F2FAD6_100%)]">
       <svg aria-hidden="true" viewBox="0 0 1440 900" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
@@ -77,15 +80,7 @@ function Hero() {
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-4">
-          <Link href="/creator" className="hidden py-3 text-[14px] font-medium text-ink no-underline hover:underline sm:inline">
-            For creators
-          </Link>
-          <Link href="/creators/ana-reyes" className={pillClass("outline-dark", "hidden px-5 text-[14px] sm:inline-flex")}>
-            License a face
-          </Link>
-          <Link href="/brand" className={pillClass("ink", "px-5 text-[14px]")}>
-            Brand console
-          </Link>
+          <OperatorGate state={state} onChange={() => void refresh()} light />
         </div>
       </header>
 
@@ -100,11 +95,8 @@ function Hero() {
           className="lk-rise absolute left-1/2 top-[58px] h-[230px] w-[164px] [mask-image:linear-gradient(to_bottom,#000_92%,transparent)] sm:top-[128px] sm:h-[412px] sm:w-[294px]"
           style={{ transform: "translateX(-50%)" }}
         >
-          <Image src="/demo/ana-reyes.svg" alt="" fill priority sizes="(min-width: 640px) 300px, 170px" className="object-contain object-bottom" />
+          <Image src="/landing/hero-cutout.webp" alt="" fill priority sizes="(min-width: 640px) 300px, 170px" className="object-contain object-bottom" />
         </div>
-        <span className="lk-drop absolute left-1/2 top-[150px] z-20 ml-[58px] rounded-full bg-ink px-3 py-1 text-[11px] font-semibold text-lime sm:top-[318px] sm:ml-[150px] sm:text-[13px]">
-          Synthetic demo face
-        </span>
         <Ribbon words={RIBBON_A} dir="l" className="top-[236px] z-10 bg-violet text-white sm:top-[476px]" style={{ transform: "rotate(4deg)" }} />
         <Ribbon words={RIBBON_B} dir="r" className="top-[266px] z-10 bg-[#4C5230] text-white sm:top-[514px]" style={{ transform: "rotate(-3deg)" }} />
       </div>
@@ -153,12 +145,12 @@ function Stats() {
               <span className="h-8 w-8 rounded-full border-2 border-ink bg-lime" />
             </span>
             <div aria-hidden="true" className="absolute right-10 top-10 hidden h-[230px] w-[260px] sm:block">
-              <span className="absolute left-5 top-2.5 overflow-hidden rounded-full border-4 border-white">
-                <Avatar seed="a1" size={86} />
+              <span className="absolute left-5 top-2.5 h-[86px] w-[86px] overflow-hidden rounded-full border-4 border-white">
+                <Image src="/landing/avatar-1.png" alt="" fill sizes="86px" className="scale-[1.06] object-cover" />
               </span>
               <span className="absolute left-[70px] top-24 h-1 w-[120px] origin-left rotate-[38deg] rounded bg-violet" />
-              <span className="absolute bottom-0 right-2.5 overflow-hidden rounded-full border-4 border-white">
-                <Avatar seed="b7" size={96} />
+              <span className="absolute bottom-0 right-2.5 h-24 w-24 overflow-hidden rounded-full border-4 border-white">
+                <Image src="/landing/avatar-2.png" alt="" fill sizes="96px" className="scale-[1.06] object-cover" />
               </span>
             </div>
             <span className="mt-auto self-start rounded-full bg-violet-deep px-3.5 py-1.5 text-[13px] font-semibold text-white">For brands</span>
@@ -248,14 +240,15 @@ function HowItWorks() {
               click.
             </p>
             <div className="relative aspect-[5/4] overflow-hidden rounded-[28px] bg-[#25B6D2]">
-              <Image src="/demo/ana-reyes.svg" alt="" fill sizes="(min-width: 1024px) 540px, 92vw" className="object-contain object-bottom" />
-              <span className="absolute bottom-3 right-3 rounded-full bg-ink px-3 py-1 text-[12px] font-semibold text-lime">Synthetic demo face</span>
+              <Image src="/landing/portrait-cyan.png" alt="" fill sizes="(min-width: 1024px) 540px, 92vw" className="scale-[1.03] object-cover object-[50%_22%]" />
               <div
                 className={`${c("from-l")} absolute left-[18px] top-1/2 -mt-[70px] flex flex-col gap-2.5 rounded-[18px] bg-white px-3.5 py-3 text-[13px] shadow-[0_12px_30px_rgba(18,19,22,0.15)]`}
                 style={{ transitionDelay: ".7s" }}
               >
                 <span className="flex items-center gap-2">
-                  <Avatar seed="c3" size={28} />
+                  <span aria-hidden="true" className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full">
+                    <Image src="/landing/avatar-3.png" alt="" fill sizes="28px" className="scale-[1.06] object-cover" />
+                  </span>
                   <b className="font-semibold">Advertising licence</b>
                   <span className="flex items-center gap-1.5 text-grey">
                     <span aria-hidden="true" className="h-2 w-2 rounded-full bg-ok" />
@@ -263,7 +256,9 @@ function HowItWorks() {
                   </span>
                 </span>
                 <span className="flex items-center gap-2">
-                  <Avatar seed="d4" size={28} />
+                  <span aria-hidden="true" className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full">
+                    <Image src="/landing/avatar-4.png" alt="" fill sizes="28px" className="scale-[1.06] object-cover" />
+                  </span>
                   <b className="font-semibold">Social request</b>
                   <span className="flex items-center gap-1.5 text-grey">
                     <span aria-hidden="true" className="h-2 w-2 rounded-full bg-violet" />
@@ -271,7 +266,9 @@ function HowItWorks() {
                   </span>
                 </span>
                 <span className="flex items-center gap-2">
-                  <Avatar seed="e5" size={28} />
+                  <span aria-hidden="true" className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full">
+                    <Image src="/landing/avatar-5.png" alt="" fill sizes="28px" className="scale-[1.06] object-cover" />
+                  </span>
                   <b className="font-semibold">Product licence</b>
                   <span className="flex items-center gap-1.5 text-grey">
                     <span aria-hidden="true" className="h-2 w-2 rounded-full bg-bad" />
@@ -293,13 +290,13 @@ function HowItWorks() {
 // ---------------------------------------------------------------- creators
 
 /**
- * Neutral silhouettes only, never a face: each card is labelled Example and invites a creator.
+ * Sample images only, never a real creator's face: each card is labelled Example and invites a creator.
  * Real creators are in the marketplace, with the photo they chose to publish there.
  */
 const EXAMPLES = [
-  { photo: "s1", frame: "/landing/card-violet.png", tint: SILHOUETTES[1] },
-  { photo: "s2", frame: "/landing/card-ribbons.png", tint: SILHOUETTES[2] },
-  { photo: "s3", frame: "/landing/card-sky.png", tint: SILHOUETTES[3] },
+  { photo: "/landing/portrait-pink.png", frame: "/landing/card-violet.png" },
+  { photo: "/landing/portrait-glasses.png", frame: "/landing/card-ribbons.png" },
+  { photo: "/landing/portrait-curly.png", frame: "/landing/card-sky.png" },
 ];
 const TILTS = ["-7deg", "-3deg", "6deg"];
 /** Grid placement at sm and up: first card tall on the left, heading top right, the others below it. */
@@ -321,8 +318,8 @@ function Creators() {
         <div className={`rv${seen ? " in" : ""} flex flex-wrap items-end gap-4 sm:col-span-2 sm:col-start-2 sm:row-start-1 sm:self-start sm:pl-6 sm:pt-8`}>
           <h2 className="m-0 font-display text-[clamp(26px,3.4vw,40px)] font-extrabold leading-[1.15]">
             MEET THE{" "}
-            <span aria-hidden="true" className="inline-block align-middle">
-              <Avatar seed="f7" size={40} />
+            <span aria-hidden="true" className="relative inline-block h-10 w-10 overflow-hidden rounded-full align-middle">
+              <Image src="/landing/avatar-7.png" alt="" fill sizes="40px" className="scale-[1.06] object-cover" />
             </span>
             <br />
             CREATORS
@@ -356,8 +353,8 @@ function Creators() {
               style={{ transform, transitionDelay: `${0.1 + i * 0.18}s`, backgroundImage: `url(${ex.frame})`, backgroundSize: "cover" }}
             >
               <span className="absolute left-5 top-5 z-10 rounded-full bg-white px-3 py-1.5 font-display text-[11px] font-bold">EXAMPLE</span>
-              <div className="relative flex aspect-[4/5] items-end justify-center overflow-hidden rounded-[20px]" style={{ background: ex.tint.tint }}>
-                <Silhouette fill={ex.tint.sil} width="80%" />
+              <div className="relative aspect-[4/5] overflow-hidden rounded-[20px]">
+                <Image src={ex.photo} alt="" fill sizes="(min-width: 640px) 340px, 90vw" className="scale-[1.04] object-cover object-top" />
               </div>
               <div className="absolute bottom-6 left-6 right-6 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2.5">
                 <span className="flex min-w-0 flex-col">
@@ -430,8 +427,8 @@ function Quotes() {
             <span className="flex items-center gap-4">
               <span aria-hidden="true" className="hidden sm:flex">
                 {[6, 8, 5].map((n, i) => (
-                  <span key={n} className="overflow-hidden rounded-full border-[3px] border-white" style={{ marginLeft: i ? -12 : 0 }}>
-                    <Avatar seed={`g${n}`} size={38} />
+                  <span key={n} className="relative h-11 w-11 overflow-hidden rounded-full border-[3px] border-white" style={{ marginLeft: i ? -12 : 0 }}>
+                    <Image src={`/landing/avatar-${n}.png`} alt="" fill sizes="44px" className="scale-[1.06] object-cover" />
                   </span>
                 ))}
               </span>

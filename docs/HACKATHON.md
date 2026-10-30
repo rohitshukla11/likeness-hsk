@@ -204,10 +204,9 @@ address 35.254.5.116, behind Caddy with Let's Encrypt on https://35-254-5-116.ss
 **Reused** (copied from Rohit's earlier project [likeness-arc](https://github.com/rohitshukla11/likeness-arc)
 @ea40c8e, `web/`, in commit de3cc4e "port from likeness-arc", then edited): the design system
 (`components/ds`, `app/globals.css`), the landing page, header and footer, the creator card, the Verify page's
-layout, `components/ui.tsx` helpers, the Next.js and Tailwind setup (same pinned versions), and the abstract
-card backgrounds. arc's photographic landing portraits and avatars were removed (their source isn't recorded),
-replaced by a synthetic vector illustration of the demo creator (`public/demo/ana-reyes.svg`, drawn for this
-project) and neutral silhouettes.
+layout, `components/ui.tsx` helpers, the Next.js and Tailwind setup (same pinned versions), the abstract
+card backgrounds, and the landing photos (portraits and avatars, `public/landing/`), also used for the demo
+creator's portrait.
 
 **Rebuilt for HSK during the hackathon:** every data path. The UI is a front end only; Next.js proxies `/api`,
 `/a2a`, `/.well-known` and `/console` to the agents backend. New: `lib/api.ts` (the backend's types),

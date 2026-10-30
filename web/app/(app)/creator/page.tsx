@@ -100,7 +100,7 @@ export default function CreatorDashboard() {
             )}
           </ul>
         )}
-        {state && !state.operator && state.login && <p className="m-0 text-[13px] text-grey">Revoking is an operator action: unlock with the demo password at the top right.</p>}
+        {state && !state.operator && state.login && <p className="m-0 text-[13px] text-grey">Revoking is an operator action: log in with the demo password (Login, top right).</p>}
       </Card>
 
       <Card title="Payments received">
