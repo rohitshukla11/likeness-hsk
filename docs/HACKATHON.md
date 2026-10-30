@@ -185,3 +185,16 @@ Written new for this project, after HashKey published its HSP Agentic Payment gu
   field names, stops on anything ambiguous; `agents/src/hsp/agentic/terminal.ts`: the two approvals in
   `pnpm run testnet`; `pnpm run deploy -- --hsp-token`: the prepared redeploy for HSP's token;
   [docs/HSP_LIVE_RUN.md](HSP_LIVE_RUN.md): the live-run checklist.
+
+## 30 October: the public server (GCP)
+
+Written new: the full app on a Compute Engine e2-micro (project `likeness-hsk`, us-central1) at the static
+address 35.254.5.116, behind Caddy with Let's Encrypt on https://35-254-5-116.sslip.io, run by systemd.
+
+- `agents/src/app/guard.ts` (`LIKENESS_PUBLIC=1`): operator actions need the demo password (a signed
+  HttpOnly, Secure, SameSite=Strict session), per-IP rate limits, one payment at a time, at most 10 paid
+  renders a UTC day across restarts; the brand policy is 0.05 USDT a render and 0.50 USDT a day.
+- `agents/scripts/vm.ts`: the server's own testnet-only wallets (creator, creator agent, brand, render agent,
+  emulator executor), made fresh with `encryptKeystore`; the keystore password and the demo password live in
+  Secret Manager and reach the app through a root-created tmpfs file. Nothing from the team's other keystores
+  is on the server.

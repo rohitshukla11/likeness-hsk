@@ -16,6 +16,21 @@ before anything is signed.
 Built for the **HSK Chain Horizon Hackathon**, track **Agent Payments & A2A Settlement (HSP)**.
 What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 
+## Try it: https://35-254-5-116.sslip.io
+
+The full app, running on HSK Chain testnet (chain 133) with HSP Agentic Payment through our offline MCP
+emulator until HashKey's QA server allowlists this server's address (35.254.5.116); the banner says which.
+
+- **Open to everyone:** the overview, the creator's terms and licences, payments with explorer links,
+  **Verify** (drop a file: Licensed, Expired, Revoked or Unknown) and the creator agent's A2A card.
+- **Operator actions** (take a licence, pay for a render with the two approvals, revoke): unlock them on the
+  Brand console or Creator page with the **demo password**. It is not in this repository; judges get it from
+  the team with the submission (ask us if you don't have it).
+- **Limits:** at most 10 paid renders a day (UTC), 0.05 test USDT each, one payment at a time, per-address
+  rate limits. Everything is testnet: the tokens have no value.
+- The server has its own testnet-only wallets (creator `0xD2925E4A…29ca9`, brand `0x8E9B246D…4DDec`);
+  its keystores are encrypted and their password lives in Google Secret Manager.
+
 ## Live on HSK Chain testnet (chain 133)
 
 | Contract | Address (verified on Blockscout) |
@@ -185,6 +200,7 @@ git clone --recurse-submodules https://github.com/rohitshukla11/likeness-hsk && 
 cd agents && pnpm install && pnpm test                 # 59 agent tests (anvil from Foundry needed)
 LIKENESS_MODE=local pnpm app                           # http://127.0.0.1:8788: a local chain, no keys needed
 LIKENESS_HSP=agentic LIKENESS_MODE=local pnpm app      # the same with HSP Agentic Payment (MCP emulator) and the approvals
+pnpm run vm keys && pnpm run vm setup                 # the public server's own testnet wallets (dry run; --broadcast sends)
 ```
 
 **Pages:**
