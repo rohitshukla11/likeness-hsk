@@ -6,12 +6,13 @@
 //   pnpm run vm -- setup                dry run of the on-chain setup, from this Mac
 //   pnpm run vm -- setup --broadcast    the deployer sends each wallet ~0.006 test HSK and mints 1 test USDT
 //                                       to the new brand; the new creator registers (the attester signs)
-//                                       and names its agent on HspSettlement
+//                                       and names its agent on HspSettlement; the Safe (owner of the
+//                                       contracts, deployer as its single owner) allows the VM's render agent
 // Testnet (chain 133) only. The new brand's Permit2 approval is printed for Rohit to run.
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createPublicClient, createWalletClient, formatEther, http, parseAbi, parseEther, stringToHex, type Abi, type Address, type LocalAccount } from "viem";
+import { concat, createPublicClient, createWalletClient, encodeFunctionData, formatEther, http, pad, parseAbi, parseEther, stringToHex, type Abi, type Address, type LocalAccount } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { chainOf, creatorRegistryAbi, hspSettlementAbi, type Deployment } from "../src/chain/contracts.js";
 import { deploymentsDir } from "../src/chain/networks.js";
@@ -62,7 +63,7 @@ if (args[0] === "keys") {
   for (const n of NAMES) {
     const has = await pub.getBalance({ address: vm[n].address });
     const want = parseEther("0.006");
-    if (has >= want) console.log(`${n.padEnd(14)} already has ${formatEther(has)} HSK`);
+    if (has >= want / 2n) console.log(`${n.padEnd(14)} already has ${formatEther(has)} HSK`);
     else await send(`${n}: +${formatEther(want - has)} HSK`, deployer, { to: vm[n].address, value: want - has });
   }
   // 2. Test USDT for the new brand (the deployment's TestUSDT; the deployer may mint).
@@ -96,6 +97,20 @@ if (args[0] === "keys") {
   const agent = await pub.readContract({ address: dep.settlement, abi: hspSettlementAbi, functionName: "agentOf", args: [vm.creator.address] });
   if ((agent as string).toLowerCase() === vm["creator-agent"].address.toLowerCase()) console.log("creator agent already set");
   else await send("setAgent(creator-agent)", vm.creator, { address: dep.settlement, abi: hspSettlementAbi as Abi, functionName: "setAgent", args: [vm["creator-agent"].address] });
+
+  // 5. The VM's render agent may anchor receipts: HspSettlement.setRenderAgent, executed by the Safe that owns
+  //    it. A single owner can use a "pre-validated" signature: r = owner, s = 0, v = 1.
+  const renderAbi = parseAbi(["function isRenderAgent(address) view returns (bool)", "function setRenderAgent(address,bool)"]);
+  const safeAbi = parseAbi(["function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, bytes signatures) payable returns (bool)", "function getOwners() view returns (address[])"]);
+  if (await pub.readContract({ address: dep.settlement, abi: renderAbi, functionName: "isRenderAgent", args: [vm["render-agent"].address] })) console.log("render agent already allowed");
+  else {
+    const owners = await pub.readContract({ address: dep.safe, abi: safeAbi, functionName: "getOwners" });
+    if (!owners.some((o) => o.toLowerCase() === deployer.address.toLowerCase())) throw new Error("the deployer isn't an owner of the Safe");
+    const data = encodeFunctionData({ abi: renderAbi, functionName: "setRenderAgent", args: [vm["render-agent"].address, true] });
+    const prevalidated = concat([pad(deployer.address, { size: 32 }), pad("0x00", { size: 32 }), "0x01"]);
+    const zero = "0x0000000000000000000000000000000000000000" as const;
+    await send("Safe: setRenderAgent(VM render agent)", deployer, { address: dep.safe, abi: safeAbi as Abi, functionName: "execTransaction", args: [dep.settlement, 0n, data, 0, 0n, 0n, 0n, zero, zero, prevalidated] });
+  }
 
   console.log(`\nFor Rohit to run (the new brand approves Permit2 for 1 test USDT; cast asks nothing, the password is read from the file):
 cast send ${dep.token} "approve(address,uint256)" ${dep.permit2} 1000000 \\
