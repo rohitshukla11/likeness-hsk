@@ -8,6 +8,13 @@
 //                                       to the new brand; the new creator registers (the attester signs)
 //                                       and names its agent on HspSettlement; the Safe (owner of the
 //                                       contracts, deployer as its single owner) allows the VM's render agent
+//   pnpm run vm -- attester             the VM's own attester key (.secrets/vm/keystores/attester) and a dry
+//                                       run of CreatorRegistry.setAttester(it), executed by the Safe
+//   pnpm run vm -- attester --broadcast  sends it (the deployer, the Safe's single owner, with a
+//                                       pre-validated signature); then the VM attests creators it onboards
+//   pnpm run vm -- topup [--broadcast]  the deployer mints 5 test USDT to the VM brand and sends 0.01 test HSK
+//                                       to the VM executor (dry run without --broadcast); prints the brand's
+//                                       Permit2 approval for Rohit to run
 // Testnet (chain 133) only. The new brand's Permit2 approval is printed for Rohit to run.
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -115,6 +122,84 @@ if (args[0] === "keys") {
   console.log(`\nFor Rohit to run (the new brand approves Permit2 for 1 test USDT; cast asks nothing, the password is read from the file):
 cast send ${dep.token} "approve(address,uint256)" ${dep.permit2} 1000000 \\
   --keystore .secrets/vm/keystores/brand --password-file .secrets/vm/keystore-password --rpc-url ${dep.rpcUrl}`);
+} else if (args[0] === "attester") {
+  const broadcast = args.includes("--broadcast");
+  const dep = JSON.parse(readFileSync(`${deploymentsDir(root)}/testnet.json`, "utf8"));
+  if (dep.chainId !== 133) throw new Error("testnet (chain 133) only");
+  const chain = chainOf({ chainId: dep.chainId, rpcUrl: dep.rpcUrl, explorer: dep.explorer } as Deployment);
+  const pub = createPublicClient({ chain, transport: http(dep.rpcUrl) });
+  const vmPw = readFileSync(`${dir}/keystore-password`, "utf8").trimEnd();
+  const path = `${dir}/keystores/attester`;
+  if (!existsSync(path)) writeSecret(path, encryptKeystore(generatePrivateKey(), vmPw));
+  const attester = loadAccount(path, vmPw);
+  const deployer = loadAccount(`${root}.secrets/keystores/deployer`, keychainPassword());
+  const registryAbi = parseAbi(["function attester() view returns (address)", "function owner() view returns (address)", "function setAttester(address)"]);
+  const safeAbi = parseAbi(["function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, bytes signatures) payable returns (bool)", "function getOwners() view returns (address[])", "function getThreshold() view returns (uint256)"]);
+  const [current, owner, owners, threshold] = await Promise.all([
+    pub.readContract({ address: dep.creators, abi: registryAbi, functionName: "attester" }),
+    pub.readContract({ address: dep.creators, abi: registryAbi, functionName: "owner" }),
+    pub.readContract({ address: dep.safe, abi: safeAbi, functionName: "getOwners" }),
+    pub.readContract({ address: dep.safe, abi: safeAbi, functionName: "getThreshold" }),
+  ]);
+  const data = encodeFunctionData({ abi: registryAbi, functionName: "setAttester", args: [attester.address] });
+  console.log(`CreatorRegistry      ${dep.creators}
+  owner              ${owner}${owner.toLowerCase() === dep.safe.toLowerCase() ? " (the Safe)" : " (NOT the Safe)"}
+  current attester   ${current}
+  new attester       ${attester.address} (VM only; .secrets/vm/keystores/attester)
+Safe                 ${dep.safe}, threshold ${threshold}, owners ${owners.join(", ")}
+  executor           deployer ${deployer.address}${owners.some((o) => o.toLowerCase() === deployer.address.toLowerCase()) ? " (an owner)" : " (NOT an owner)"}
+  call               execTransaction(to ${dep.creators}, value 0, data setAttester(${attester.address}) = ${data}, operation 0, pre-validated signature)
+  deployer balance   ${formatEther(await pub.getBalance({ address: deployer.address }))} test HSK`);
+  if (current.toLowerCase() === attester.address.toLowerCase()) {
+    console.log("already the attester: nothing to send");
+  } else if (!broadcast) {
+    const gas = await pub.estimateContractGas({ account: deployer, address: dep.safe, abi: safeAbi, functionName: "execTransaction", args: [dep.creators, 0n, data, 0, 0n, 0n, 0n, "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", concat([pad(deployer.address, { size: 32 }), pad("0x00", { size: 32 }), "0x01"])] });
+    console.log(`  estimated gas      ${gas} (about ${formatEther(gas * (await pub.getGasPrice()))} test HSK)\n(dry run: nothing sent; add --broadcast to send)`);
+  } else {
+    if (owner.toLowerCase() !== dep.safe.toLowerCase() || threshold !== 1n || !owners.some((o) => o.toLowerCase() === deployer.address.toLowerCase())) throw new Error("the Safe must own CreatorRegistry, with the deployer as its single signer");
+    const zero = "0x0000000000000000000000000000000000000000" as const;
+    const w = createWalletClient({ account: deployer, chain, transport: http(dep.rpcUrl) });
+    const hash = await w.writeContract({ address: dep.safe, abi: safeAbi, functionName: "execTransaction", args: [dep.creators, 0n, data, 0, 0n, 0n, 0n, zero, zero, concat([pad(deployer.address, { size: 32 }), pad("0x00", { size: 32 }), "0x01"])] });
+    const r = await pub.waitForTransactionReceipt({ hash });
+    if (r.status !== "success") throw new Error(`setAttester reverted: ${dep.explorer}/tx/${hash}`);
+    const now = await pub.readContract({ address: dep.creators, abi: registryAbi, functionName: "attester" });
+    console.log(`Safe: setAttester    ${dep.explorer}/tx/${hash}\n  attester now       ${now}`);
+  }
+} else if (args[0] === "topup") {
+  const broadcast = args.includes("--broadcast");
+  const dep = JSON.parse(readFileSync(`${deploymentsDir(root)}/testnet.json`, "utf8"));
+  if (dep.chainId !== 133) throw new Error("testnet (chain 133) only");
+  const chain = chainOf({ chainId: dep.chainId, rpcUrl: dep.rpcUrl, explorer: dep.explorer } as Deployment);
+  const pub = createPublicClient({ chain, transport: http(dep.rpcUrl) });
+  const vmPw = readFileSync(`${dir}/keystore-password`, "utf8").trimEnd();
+  const brand = loadAccount(`${dir}/keystores/brand`, vmPw).address;
+  const executor = loadAccount(`${dir}/keystores/executor`, vmPw).address;
+  const deployer = loadAccount(`${root}.secrets/keystores/deployer`, keychainPassword());
+  const erc = parseAbi(["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function mint(address,uint256)"]);
+  const usdt = (a: Address) => pub.readContract({ address: dep.token, abi: erc, functionName: "balanceOf", args: [a] });
+  const MINT = 5_000_000n;
+  const HSK = parseEther("0.01");
+  const show = async () =>
+    console.log(`VM brand     ${brand}: ${Number(await usdt(brand)) / 1e6} test USDT, Permit2 allowance ${Number(await pub.readContract({ address: dep.token, abi: erc, functionName: "allowance", args: [brand, dep.permit2] })) / 1e6}
+VM executor  ${executor}: ${formatEther(await pub.getBalance({ address: executor }))} test HSK
+deployer     ${deployer.address}: ${formatEther(await pub.getBalance({ address: deployer.address }))} test HSK`);
+  await show();
+  console.log(`\n1. TestUSDT ${dep.token}.mint(${brand}, ${MINT}) = 5 test USDT, from the deployer
+2. ${formatEther(HSK)} test HSK from the deployer to ${executor}`);
+  if (!broadcast) console.log("(dry run: nothing sent; add --broadcast to send)");
+  else {
+    const w = createWalletClient({ account: deployer, chain, transport: http(dep.rpcUrl) });
+    const m = await w.writeContract({ address: dep.token, abi: erc, functionName: "mint", args: [brand, MINT] });
+    if ((await pub.waitForTransactionReceipt({ hash: m })).status !== "success") throw new Error(`mint reverted: ${dep.explorer}/tx/${m}`);
+    console.log(`mint         ${dep.explorer}/tx/${m}`);
+    const t = await w.sendTransaction({ to: executor, value: HSK });
+    if ((await pub.waitForTransactionReceipt({ hash: t })).status !== "success") throw new Error(`transfer failed: ${dep.explorer}/tx/${t}`);
+    console.log(`HSK          ${dep.explorer}/tx/${t}\n`);
+    await show();
+  }
+  console.log(`\nFor Rohit to run (the VM brand approves Permit2 for 5 test USDT; the password is read from the file):
+cast send ${dep.token} "approve(address,uint256)" ${dep.permit2} 5000000 \\
+  --keystore .secrets/vm/keystores/brand --password-file .secrets/vm/keystore-password --rpc-url ${dep.rpcUrl}`);
 } else {
-  throw new Error("pnpm run vm -- keys | setup [--broadcast]");
+  throw new Error("pnpm run vm -- keys | setup [--broadcast] | attester [--broadcast] | topup [--broadcast]");
 }

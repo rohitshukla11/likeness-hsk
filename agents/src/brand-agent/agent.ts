@@ -95,13 +95,18 @@ export class BrandAgent {
     return view;
   }
 
-  /** Takes an auto-approved licence on chain, within the creator's published terms. */
+  /**
+   * Takes an auto-approved licence on chain, within the creator's published terms. priceMultiplier: a
+   * video licence pays several renders' worth per render (LicenseRegistry accepts any price at or above
+   * the creator's; HspSettlement then records exactly the licence price).
+   */
   async license(
     conn: CreatorConnection,
-    r: { category: number; regions: number; durationSeconds: bigint; renderCap: number; purpose: string },
+    r: { category: number; regions: number; durationSeconds: bigint; renderCap: number; purpose: string; priceMultiplier?: bigint },
   ): Promise<bigint> {
     const t = await this.terms(conn, r.category);
     if (r.renderCap > this.c.policy.maxRendersPerLicence) throw new Refused("render cap above the brand's policy");
+    if (t.pricePerRender * (r.priceMultiplier ?? 1n) > this.c.policy.maxPricePerRender) throw new Refused("the price per render is above the brand's policy");
     const ch = this.c.chain;
     const receipt = await ch.write(this.c.account, {
       address: ch.d.licences,
@@ -114,7 +119,7 @@ export class BrandAgent {
           regions: r.regions,
           duration: r.durationSeconds,
           renderCap: r.renderCap,
-          pricePerRender: t.pricePerRender,
+          pricePerRender: t.pricePerRender * (r.priceMultiplier ?? 1n),
           purposeHash: keccak256(toBytes(r.purpose)),
           deadline: 0n,
           salt: "0x0000000000000000000000000000000000000000000000000000000000000000",

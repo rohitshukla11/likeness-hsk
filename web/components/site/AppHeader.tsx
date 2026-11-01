@@ -1,17 +1,16 @@
 "use client";
 
-/** The app header: home mark, the destinations, the operator Login; then the HSP mode banner. */
+/** The app header: home mark, the destinations, Google sign-in (and the admin session, when on). */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { btnClass } from "@/components/ds";
 import { IconPerson } from "@/components/ds/icons";
-import type { State } from "@/lib/api";
-import { ModeBanner } from "./ModeBanner";
-import { OperatorGate } from "./OperatorGate";
+import { api, type State } from "@/lib/api";
+import { SignIn } from "./SignIn";
 
 const NAV = [
   { href: "/creators", label: "Creators" },
-  { href: "/brand", label: "Brand" },
-  { href: "/creator", label: "Creator dashboard" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/verify", label: "Verify" },
   { href: "/how", label: "How it works" },
 ];
@@ -41,11 +40,23 @@ export function AppHeader({ state, onChange }: { state: State | null; onChange: 
             })}
           </nav>
           <div className="ml-auto flex items-center gap-3">
-            <OperatorGate state={state} onChange={onChange} />
+            {state?.operator && state.login && (
+              <button
+                type="button"
+                className={btnClass("ghost", "min-h-9 text-[13px] text-lime")}
+                title="Admin session (demo password): click to end it"
+                onClick={async () => {
+                  await api("/api/logout", {});
+                  onChange();
+                }}
+              >
+                Admin · end
+              </button>
+            )}
+            <SignIn />
           </div>
         </div>
       </div>
-      <ModeBanner state={state} />
     </header>
   );
 }

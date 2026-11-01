@@ -11,8 +11,8 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { AppPage, btnClass, CreatorFace, ErrorCard } from "@/components/ds";
 import { IconCheck, IconCross, IconQuestion, IconUpload } from "@/components/ds/icons";
 import { Addr, fmtDate, fmtDay, inputClass, Tx } from "@/components/ui";
-import { api, sha256Hex, type Verdict } from "@/lib/api";
-import { DEMO_CREATOR } from "@/lib/demo";
+import { api, sha256Hex, type CreatorView, type Verdict } from "@/lib/api";
+import { displayOf } from "@/lib/demo";
 
 const LOOK = {
   Licensed: { bg: "bg-lime", stroke: "#DCF37B", stamp: "Licensed", icon: IconCheck },
@@ -37,6 +37,7 @@ function Verify() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState<{ url: string; size: number; type: string } | null>(null);
+  const [who, setWho] = useState<ReturnType<typeof displayOf> | null>(null);
 
   const byHash = useCallback(async (h: string) => {
     setBusy(true);
@@ -63,6 +64,12 @@ function Verify() {
     setHash(h);
     await byHash(h);
   }
+
+  // The creator behind a receipt: Ana Reyes (synthetic) or a registered, YouTube-verified creator.
+  useEffect(() => {
+    setWho(null);
+    if (result?.creator) api<CreatorView>(`/api/creators/${result.creator}`).then((c) => setWho(displayOf(c)), () => setWho(null));
+  }, [result?.creator]);
 
   const look = result ? LOOK[result.verdict] : null;
   const Icon = look?.icon ?? IconUpload;
@@ -102,7 +109,9 @@ function Verify() {
             </button>
           </form>
           <figure className="m-0 flex flex-col gap-2 rounded-[20px] bg-white p-3">
-            {file ? (
+            {file?.type.startsWith("video/") ? (
+              <video src={file.url} controls muted playsInline className="max-h-[560px] w-full rounded-[14px] bg-ink" />
+            ) : file ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={file.url} alt="The checked file" className="max-h-[560px] w-full rounded-[14px] bg-paper object-contain" />
             ) : (
@@ -154,12 +163,13 @@ function Verify() {
               <div className="grid grid-cols-1 gap-[14px] sm:grid-cols-3">
                 <div className="flex min-w-0 flex-col gap-2 rounded-[18px] bg-white p-4">
                   <span className="text-[13px] text-grey">Creator</span>
-                  <Link href="/creators/ana-reyes" className="flex min-w-0 items-center gap-2.5 font-semibold text-ink no-underline">
-                    <CreatorFace seed={result!.creator!} photo={DEMO_CREATOR.photo} size={36} />
-                    <span className="truncate">{DEMO_CREATOR.name}</span>
+                  <Link href={`/creators/${who?.slug ?? result!.creator!.toLowerCase()}`} className="flex min-w-0 items-center gap-2.5 font-semibold text-ink no-underline">
+                    <CreatorFace seed={result!.creator!} photo={who?.photo || null} size={36} />
+                    <span className="truncate">{who?.name ?? "Creator"}</span>
                   </Link>
                   <span className="text-[12px] text-grey">
-                    <Addr a={result!.creator!} /> · {DEMO_CREATOR.label.toLowerCase()}
+                    <Addr a={result!.creator!} />
+                    {who ? ` · ${who.label.toLowerCase()}` : ""}
                   </span>
                 </div>
                 <div className="flex min-w-0 flex-col gap-2 rounded-[18px] bg-white p-4">
@@ -175,6 +185,34 @@ function Verify() {
                   <span className="text-[12px] text-grey">{result!.licenceStatus === "Active" ? `Until ${fmtDay(result!.licenceEnd!)}` : `Licence period ${result!.licenceStatus === "Expired" ? "ended" : "ends"} ${fmtDay(result!.licenceEnd!)}`}</span>
                 </div>
               </div>
+
+              {result!.render?.prompt && (
+                <section aria-label="What was generated" className="rounded-[18px] bg-white px-[18px] py-4 text-[14px]">
+                  <p className="m-0 font-semibold">
+                    What was generated: {result!.render.kind === "video" ? "a video ad" : "an image ad"}
+                    {result!.render.model ? `, ${result!.render.model} on Vertex AI` : ""}
+                  </p>
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-[13px] text-grey">The exact prompt</summary>
+                    <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap rounded-[10px] bg-paper p-2 font-sans text-[13px]">{result!.render.prompt}</pre>
+                  </details>
+                  <p className="m-0 mt-1 break-all font-mono text-[12px] text-grey">prompt sha256 {result!.render.promptSha256}</p>
+                </section>
+              )}
+
+              {result!.bundle && (
+                <section aria-label="Licence bundle" className="rounded-[18px] bg-white px-[18px] py-4 text-[14px]">
+                  <p className="m-0 font-semibold">
+                    Licence bundle{result!.bundle.brand ? ` taken by ${result!.bundle.brand}` : ""}
+                  </p>
+                  <p className="m-0 mt-1 text-grey">&ldquo;{result!.bundle.brief}&rdquo;</p>
+                  <p className="m-0 mt-1 text-[13px] text-grey">
+                    One licence per media type on HSK Chain:{" "}
+                    {[result!.bundle.imageLicence && `images #${result!.bundle.imageLicence}`, result!.bundle.videoLicence && `videos #${result!.bundle.videoLicence}`].filter(Boolean).join(", ")}
+                    . This file is {result!.bundle.kind === "video" ? "a video" : "an image"} under #{result!.licenceId}.
+                  </p>
+                </section>
+              )}
 
               <section aria-label="Details" className="rounded-[18px] bg-white px-[18px] py-4">
                 <dl className="m-0 grid grid-cols-1 gap-x-[18px] gap-y-2.5 text-[13px] sm:grid-cols-3">

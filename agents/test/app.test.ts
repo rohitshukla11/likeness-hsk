@@ -207,7 +207,7 @@ describe("the public server: demo password, rate limits, daily cap (local devnet
     for (const p of ["/", "/brand", "/creator", "/verify", "/agent", "/.well-known/agent-card.json", "/api/licences?who=brand", "/api/payments?who=brand"]) expect((await get(p)).status).toBe(200);
     expect((await get(`/api/verify?hash=0x${"00".repeat(32)}`)).status).toBe(200);
     const s = await (await get("/api/state")).json();
-    expect(s).toMatchObject({ operator: false, login: { required: true }, cap: { max: 1, paidToday: 0 }, policy: { maxPricePerRender: "0.10", dailyBudget: "1.00" } });
+    expect(s).toMatchObject({ operator: false, login: { required: true }, cap: { max: 1, paidToday: 0 }, policy: { maxPricePerRender: "0.15", dailyBudget: "1.00" } });
     for (const [path, body] of [["/api/brand/license", {}], ["/api/brand/pay", { licenceId: "1" }], ["/api/brand/approve", { id: "x", decision: "approve" }], ["/api/creator/revoke", { licenceId: "1" }], ["/api/brand/download", { assetHash: "0x" }]] as const) {
       expect((await post(path, body)).status).toBe(401);
     }

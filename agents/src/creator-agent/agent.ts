@@ -44,6 +44,8 @@ export interface CreatorAgentConfig {
   merchantName: string;
   jwtAudience?: string;
   publicUrl: string; // where this agent is reachable (card.url is publicUrl + /a2a)
+  /** The A2A endpoint when it isn't publicUrl + /a2a (one per creator on a server with several). */
+  a2aUrl?: string;
   log: MessageLog;
   /** Earliest HSP state at which a payment is recorded on chain. */
   recordAt?: "payment-included" | "payment-safe" | "payment-finalized";
@@ -75,6 +77,15 @@ export class CreatorAgent implements A2AHandler {
 
   constructor(private readonly c: CreatorAgentConfig) {}
 
+  /** The same agent (wallet, HSP connection, log) acting for another creator, at its own A2A endpoint. */
+  forCreator(creator: Address, a2aUrl: string, merchantName = this.c.merchantName): CreatorAgent {
+    return new CreatorAgent({ ...this.c, creator, a2aUrl, merchantName });
+  }
+
+  get creator(): Address {
+    return this.c.creator;
+  }
+
   get merchantPublicKeyPem(): string {
     return createPublicKey(this.c.merchantKey).export({ type: "spki", format: "pem" }).toString();
   }
@@ -86,7 +97,7 @@ export class CreatorAgent implements A2AHandler {
       name: `Likeness creator agent (${this.c.merchantName})`,
       description:
         "Licenses this creator's likeness for AI ads on the creator's on-chain terms, and quotes each render as an AP2 Cart Mandate paid through the HSP Gateway on HSK Chain.",
-      url: `${this.c.publicUrl}/a2a`,
+      url: this.c.a2aUrl ?? `${this.c.publicUrl}/a2a`,
       preferredTransport: "JSONRPC",
       version: "0.1.0",
       capabilities: {

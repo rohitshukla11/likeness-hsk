@@ -3,18 +3,32 @@
  * the brand agent pays (with HSP Agentic Payment: two approvals, then HSP's statuses), the creator's
  * agent records the payment on chain, and the render agent delivers and anchors the render.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { fullPrompt, videoPoster } from "../ai/generate.js";
 import type { Hex } from "viem";
 import { Refused } from "../brand-agent/agent.js";
 import type { LogEvent, MessageLog } from "../log.js";
 import type { Runtime } from "./runtime.js";
 
-export type JobState = "paying" | "submitted" | "recorded" | "delivered" | "paid-not-recorded" | "refused" | "failed";
+export type JobState = "paying" | "submitted" | "recorded" | "generating" | "delivered" | "paid-not-recorded" | "refused" | "failed";
 
 export interface PaymentJob {
   id: string;
   licenceId: string;
+  /** The signed-in brand account that started it (undefined for the operator). */
+  owner?: string;
+  /** An image or a video ad. */
+  kind: "image" | "video";
   state: JobState;
+  /** While generating: the current step (AI generation can take minutes for a video). */
+  progress?: string;
+  /** The delivered file's type and the model that made it (none for a TEST RENDER). */
+  mime?: string;
+  model?: string;
+  /** The exact prompt(s) the brand approved, and the sha256 of the render record's prompt text. */
+  prompt?: string;
+  motion?: string;
+  promptSha256?: string;
   startedAt: number;
   renderIndex?: number;
   flowId?: string;
@@ -44,14 +58,14 @@ export function hspStatuses(log: MessageLog, flowId: string | undefined) {
 
 export class PaymentJobs {
   readonly jobs = new Map<string, PaymentJob>();
-  /** onSubmitted: called once per payment handed to HSP (the public app's daily cap counts these). */
+  /** onSubmitted: called once per payment handed to HSP (the daily caps count these). */
   constructor(
     private readonly rt: Runtime,
-    private readonly onSubmitted?: () => void,
+    private readonly onSubmitted?: (job: PaymentJob) => void,
   ) {}
 
-  start(licenceId: bigint, brief: string): PaymentJob {
-    const job: PaymentJob = { id: randomUUID(), licenceId: licenceId.toString(), state: "paying", startedAt: Date.now() };
+  start(licenceId: bigint, brief: string, owner?: string, kind: "image" | "video" = "image", prompts?: { prompt: string; motion?: string }): PaymentJob {
+    const job: PaymentJob = { id: randomUUID(), licenceId: licenceId.toString(), kind, state: "paying", startedAt: Date.now(), ...(owner ? { owner } : {}), ...(prompts ?? {}) };
     this.jobs.set(job.id, job);
     void this.run(job, licenceId, brief).catch((e) => {
       job.state = e instanceof Refused ? "refused" : "failed";
@@ -62,9 +76,10 @@ export class PaymentJobs {
 
   private async run(job: PaymentJob, id: bigint, brief: string) {
     const rt = this.rt;
-    const paid = await rt.brand.payForRender(await rt.connect(), id);
+    const creator = (await rt.chain.licence(id)).creator;
+    const paid = await rt.brand.payForRender(await rt.connectTo(creator), id);
     Object.assign(job, { state: "submitted", renderIndex: paid.renderIndex, flowId: paid.flowId, paymentRequestId: paid.paymentRequestId, tokenTotalRaw: paid.tokenTotalRaw });
-    this.onSubmitted?.();
+    this.onSubmitted?.(job);
 
     if (rt.agentic) {
       // HSP's statuses, until safe, finalized or failed (the creator's agent queries every 15 s).
@@ -86,8 +101,32 @@ export class PaymentJobs {
     }
     const p = await rt.brand.waitRecorded(id, paid.renderIndex, { timeoutMs: 300_000 });
     Object.assign(job, { state: "recorded", hspTx: p.hspTxHash, nonceBound: p.nonceBound });
-    const out = await rt.render.renderAndAnchor(id, paid.renderIndex, brief);
+    // Generation starts only now, after the payment is recorded on chain.
+    Object.assign(job, { state: "generating", progress: job.kind === "video" ? "queued" : "generating the image" });
+    const out = await rt.render.renderAndAnchor(id, paid.renderIndex, brief, rt.subjectOf(creator), { kind: job.kind, prompt: job.prompt, motion: job.motion, onProgress: (step) => (job.progress = step) });
     rt.store.save(out.assetHash, out.bytes, { mime: out.mime, licenceId: id.toString(), renderIndex: paid.renderIndex });
-    Object.assign(job, { state: "delivered", assetHash: out.assetHash, anchorTx: out.tx });
+    if (out.mime === "video/mp4") await videoPoster(out.bytes).then((jpg) => rt.store.savePoster(out.assetHash, jpg), () => undefined);
+    // The render record: what was generated under the licence, with the exact prompt and its sha256.
+    const prompt = job.prompt ? fullPrompt(job.kind, { prompt: job.prompt, motion: job.motion }) : null;
+    const promptSha256 = prompt ? `0x${createHash("sha256").update(prompt).digest("hex")}` : null;
+    rt.accounts.saveRender({
+      assetHash: out.assetHash,
+      licenceId: id.toString(),
+      renderIndex: paid.renderIndex,
+      kind: job.kind,
+      mime: out.mime,
+      size: out.bytes.length,
+      prompt,
+      promptSha256,
+      model: out.model ?? null,
+      note: out.note ?? null,
+      uid: job.owner ?? "operator",
+      creator,
+      bundleId: rt.accounts.bundleOfLicence(id.toString())?.id ?? `L${id}`,
+      hspTx: job.hspTx ?? null,
+      anchorTx: out.tx,
+      createdAt: Date.now(),
+    });
+    Object.assign(job, { state: "delivered", progress: undefined, assetHash: out.assetHash, anchorTx: out.tx, mime: out.mime, ...(promptSha256 ? { promptSha256 } : {}), ...(out.model ? { model: out.model } : {}), ...(out.note ? { note: out.note } : {}) });
   }
 }

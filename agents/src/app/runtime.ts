@@ -17,7 +17,13 @@ import type { Approver } from "../hsp/agentic/payer.js";
 import { keychainPassword, loadAccount } from "../keys.js";
 import { MessageLog } from "../log.js";
 import { geminiRenderer } from "../render/gemini.js";
-import { RenderAgent, testRenderer, type Renderer } from "../render/renderAgent.js";
+import { RenderAgent, testRenderer, type Renderer, type RenderSubject } from "../render/renderAgent.js";
+import type { AdGenerator } from "../ai/generate.js";
+import { vertexGenerator } from "../ai/generate.js";
+import { aiRenderer } from "../ai/renderer.js";
+import { Accounts } from "./accounts.js";
+import { firebaseVerifier, type VerifyIdToken } from "./firebase.js";
+import { Onboarding } from "./onboarding.js";
 import { RenderStore } from "./store.js";
 
 export type Mode = "local" | "testnet" | "mainnet";
@@ -31,7 +37,9 @@ export interface Runtime {
   agentic?: { source: "hashkey-qa" | "emulator"; option: PaymentOption; recordable: boolean };
   /** The brand console's approvals before signing and before submitting (agentic). */
   approvals: ApprovalDesk;
-  renderer: "gemini" | "test";
+  renderer: "vertex" | "gemini" | "test";
+  /** AI ad generation (Vertex AI) and its brief check, when on (LIKENESS_AI=vertex). */
+  ai?: AdGenerator;
   chain: Likeness;
   log: MessageLog;
   creatorAgent: CreatorAgent;
@@ -44,13 +52,99 @@ export interface Runtime {
   connect(): Promise<CreatorConnection>;
   brandAccount(): LocalAccount; // operator only
   revoke(licenceId: bigint): Promise<Hex>; // operator only, signs as the creator
+  /** Google sign-in: accounts and roles, creator onboarding, and the Firebase ID token check. */
+  accounts: Accounts;
+  onboarding: Onboarding;
+  verifyIdToken: VerifyIdToken;
+  /** The creator agent acting for a creator: Ana Reyes's, or the shared agent at a registered creator's own endpoint. */
+  agentFor(creator: Address): CreatorAgent | undefined;
+  /** The brand agent's connection to a creator's agent (its A2A card). */
+  connectTo(creator: Address): Promise<CreatorConnection>;
+  /** Who a render is of: the creator's name and consented photo (registered creators). */
+  subjectOf(creator: Address): RenderSubject | undefined;
   stop(): void;
+}
+
+/** Sign-in and onboarding settings, and AI generation; tests pass their own token check and generator. */
+export interface AccountOptions {
+  verifyIdToken?: VerifyIdToken;
+  ai?: AdGenerator;
+}
+
+/** Accounts, onboarding and per-creator agents, the same for every mode. */
+function accountsFor(o: {
+  mode: Mode;
+  root: string;
+  publicUrl: string;
+  chain: Likeness;
+  log: MessageLog;
+  creatorAgent: CreatorAgent;
+  creator: Address;
+  brand: BrandAgent;
+  connectAna: () => Promise<CreatorConnection>;
+  attester?: LocalAccount;
+  funder: LocalAccount;
+  agentAddress: Address;
+  keystorePassword: string;
+  verifyIdToken?: VerifyIdToken;
+}) {
+  const dir = `${o.root}accounts/${o.mode}`;
+  // The local devnet is a fresh chain each run, so its accounts are too.
+  const accounts = new Accounts(o.mode === "local" ? ":memory:" : `${dir}/accounts.sqlite`);
+  const onboarding = new Onboarding({
+    accounts,
+    chain: o.chain,
+    log: o.log,
+    attester: o.attester,
+    funder: o.funder,
+    creatorAgent: o.agentAddress,
+    templateCreator: o.creator,
+    keysDir: `${o.root}.secrets/creators/${o.mode}`,
+    photosDir: `${dir}/photos`,
+    keystorePassword: o.keystorePassword,
+    label: o.mode === "local" ? "local devnet" : process.env.LIKENESS_LOCAL_TEST === "1" ? "local test" : null,
+  });
+  const agents = new Map<string, CreatorAgent>();
+  const conns = new Map<string, CreatorConnection>();
+  const isAna = (c: Address) => c.toLowerCase() === o.creator.toLowerCase();
+  const agentFor = (c: Address) => {
+    if (isAna(c)) return o.creatorAgent;
+    const row = accounts.creatorByAddress(c);
+    if (!row?.registeredTx) return undefined;
+    const k = c.toLowerCase();
+    if (!agents.has(k)) agents.set(k, o.creatorAgent.forCreator(row.address as Address, `${o.publicUrl}/api/agents/${k}/a2a`, row.name));
+    return agents.get(k);
+  };
+  return {
+    accounts,
+    onboarding,
+    verifyIdToken: o.verifyIdToken ?? firebaseVerifier(process.env.FIREBASE_PROJECT_ID ?? "likeness-hsk"),
+    agentFor,
+    connectTo: async (c: Address) => {
+      if (isAna(c)) return o.connectAna();
+      if (!agentFor(c)) throw new Error(`${c} isn't a registered creator on this server`);
+      const k = c.toLowerCase();
+      if (!conns.has(k)) conns.set(k, await o.brand.connect(`${o.publicUrl}/api/agents/${k}`));
+      return conns.get(k)!;
+    },
+    subjectOf: (c: Address): RenderSubject | undefined => {
+      const row = accounts.creatorByAddress(c);
+      if (!row) return undefined;
+      const photo = onboarding.photo(row);
+      return { name: row.name, ...(photo ? { photo } : {}) };
+    },
+  };
 }
 
 export const ADVERTISING = 1 << 8;
 
-/** Gemini only when a key is set (each render is a paid call); otherwise the marked TEST RENDER. */
-function pickRenderer(): { name: "gemini" | "test"; renderer: Renderer } {
+/**
+ * AI image and video ads on Vertex AI when LIKENESS_AI=vertex (each render is a paid call; no API key:
+ * the VM's service account or the likeness-hsk gcloud configuration); otherwise the marked TEST RENDER.
+ */
+function pickRenderer(ai?: AdGenerator): { name: "vertex" | "gemini" | "test"; renderer: Renderer; ai?: AdGenerator } {
+  const gen = ai ?? (process.env.LIKENESS_AI === "vertex" ? vertexGenerator() : undefined);
+  if (gen) return { name: "vertex", renderer: aiRenderer(gen), ai: gen };
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { name: "test", renderer: testRenderer };
   return {
@@ -63,8 +157,11 @@ function pickRenderer(): { name: "gemini" | "test"; renderer: Renderer } {
   };
 }
 
-// 0.05 USDT a render at most and 0.50 USDT a day: ten paid renders a day.
-export const POLICY = { maxPricePerRender: 50_000n, allowedCategories: ADVERTISING, dailyBudget: 500_000n, maxRendersPerLicence: 5 };
+/** A creator's price per render, at most (an image ad); a video licence costs VIDEO_MULTIPLIER renders. */
+export const CREATOR_MAX_PRICE = 50_000n;
+export const VIDEO_MULTIPLIER = 3n;
+// At most 0.15 USDT a render (a video at 3x 0.05) and 1.00 USDT a day across brand accounts.
+export const POLICY = { maxPricePerRender: CREATOR_MAX_PRICE * VIDEO_MULTIPLIER, allowedCategories: ADVERTISING, dailyBudget: 1_000_000n, maxRendersPerLicence: 5 };
 
 /**
  * local: a devnet with throwaway keys (nothing leaves the machine).
@@ -72,23 +169,42 @@ export const POLICY = { maxPricePerRender: 50_000n, allowedCategories: ADVERTISI
  * when .secrets/hsp/credentials.json exists; otherwise testnet uses the local emulator and mainnet
  * refuses to pay (the emulator never stands in for HSP on mainnet).
  */
-export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: string; operator: boolean; approve?: Approver }): Promise<Runtime> {
+export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: string; operator: boolean; approve?: Approver } & AccountOptions): Promise<Runtime> {
   const store = new RenderStore(`${opts.root}renders`);
-  const r = pickRenderer();
+  const r = pickRenderer(opts.ai);
   const approvals = new ApprovalDesk();
   // The brand console's approvals by default; the command-line run asks in the terminal instead.
   const approve = opts.approve ?? approvals.ask;
   const agenticMode = process.env.LIKENESS_HSP === "agentic";
   if (opts.mode === "local") {
-    const n = await startDevnet({ rail: "permit2", publicUrl: opts.publicUrl, ...(agenticMode ? { hsp: "agentic" as const, approve } : {}) });
+    // The same brand policy as on testnet, so local runs price and cap renders like the public server.
+    const n = await startDevnet({ rail: "permit2", publicUrl: opts.publicUrl, policy: POLICY, ...(agenticMode ? { hsp: "agentic" as const, approve } : {}) });
     let conn: CreatorConnection | undefined;
+    const connectAna = async () => (conn ??= await n.connect());
     return {
+      ...accountsFor({
+        mode: "local",
+        root: opts.root,
+        publicUrl: opts.publicUrl,
+        chain: n.chain,
+        log: n.log,
+        creatorAgent: n.creatorAgent,
+        creator: n.accounts.creator.address,
+        brand: n.brand,
+        connectAna,
+        attester: n.accounts.attester,
+        funder: n.accounts.deployer,
+        agentAddress: n.accounts.creatorAgent.address,
+        keystorePassword: randomBytes(24).toString("hex"),
+        verifyIdToken: opts.verifyIdToken,
+      }),
       mode: "local",
       operator: opts.operator,
       gateway: n.agentic ? "hsp-agentic-emulator" : "emulator",
       approvals,
       ...(n.agentic ? { agentic: { source: "emulator" as const, option: n.agentic.option, recordable: true } } : {}),
       renderer: r.name,
+      ...(r.ai ? { ai: r.ai } : {}),
       chain: n.chain,
       log: n.log,
       creatorAgent: n.creatorAgent,
@@ -98,7 +214,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
       creator: n.accounts.creator.address,
       brandAddress: n.accounts.brand.address,
       startBlock: 0n,
-      connect: async () => (conn ??= await n.connect()),
+      connect: connectAna,
       brandAccount: () => n.accounts.brand,
       revoke: async (id) => {
         await n.revoke(id);
@@ -218,7 +334,27 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     ...(agentic ? { agentic: { hsp: agentic.brandHsp, option: agentic.option, approve, balanceOf: agentic.balanceOf } } : {}),
   });
   let conn: CreatorConnection | undefined;
+  const connectAna = async () => (conn ??= await brand.connect(opts.publicUrl));
+  // The platform's attester (signs creator attestations) and the wallet that funds new creators' gas.
+  const attesterName = process.env.LIKENESS_ATTESTER_KEY ?? "attester";
+  const attester = existsSync(`${opts.root}.secrets/keystores/${attesterName}`) ? key(attesterName) : undefined;
   return {
+    ...accountsFor({
+      mode: opts.mode,
+      root: opts.root,
+      publicUrl: opts.publicUrl,
+      chain,
+      log,
+      creatorAgent,
+      creator: creator.address,
+      brand,
+      connectAna,
+      attester,
+      funder: key(process.env.LIKENESS_FUNDER_KEY ?? process.env.LIKENESS_EXECUTOR_KEY ?? "deployer"),
+      agentAddress: creatorAgentKey.address,
+      keystorePassword: pw,
+      verifyIdToken: opts.verifyIdToken,
+    }),
     mode: opts.mode,
     operator: opts.operator,
     gateway,
@@ -227,6 +363,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
       ? { agentic: { source: agentic.source, option: agentic.option, recordable: agentic.option.chainId === d.chainId && agentic.option.token.address.toLowerCase() === d.token.toLowerCase() } }
       : {}),
     renderer: r.name,
+    ...(r.ai ? { ai: r.ai } : {}),
     chain,
     log,
     creatorAgent,
@@ -236,7 +373,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     creator: creator.address,
     brandAddress: brandKey.address,
     startBlock: BigInt(dep.startBlock ?? 0),
-    connect: async () => (conn ??= await brand.connect(opts.publicUrl)),
+    connect: connectAna,
     brandAccount: () => brandKey,
     revoke: async (id) => {
       const r = await chain.write(creator, { address: d.licences, abi: licenseRegistryAbi, functionName: "revoke", args: [id] });

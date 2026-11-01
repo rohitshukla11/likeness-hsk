@@ -1,7 +1,9 @@
 /**
  * The agents backend (agents/src/app/server.ts), proxied by next.config.ts: types of what it returns and
- * small fetch helpers. Every call runs in the browser, with the operator session cookie when logged in.
+ * small fetch helpers. Every call runs in the browser, with the Google sign-in's ID token when signed in
+ * (and the admin session cookie, if any).
  */
+import { idToken } from "./firebase";
 
 export type Gateway = "hsp" | "emulator" | "hsp-agentic-qa" | "hsp-agentic-emulator";
 
@@ -13,6 +15,9 @@ export type State = {
   login: { required: true } | null;
   policy: { maxPricePerRender: string; dailyBudget: string };
   cap: { max: number; paidToday: number } | null;
+  signIn?: { google: boolean };
+  /** AI ads (Vertex AI) or TEST RENDER, with the per-day caps. */
+  ads?: { ai: boolean; videoMultiplier: number; brandCaps: Caps; siteCaps: Caps; usedToday: Caps };
   chainId: number;
   explorer: string | null;
   contracts: { creators: string; licences: string; receipts: string; settlement: string; token: string };
@@ -26,6 +31,40 @@ export type State = {
   agentic: { source: "hashkey-qa" | "emulator"; network: string; chainId: number; token: { address: string; decimals: number; symbol: string; protocol: string }; recordable: boolean; merchantName: string } | null;
 };
 
+export type Role = "brand" | "creator";
+export type AdKind = "image" | "video";
+export type Caps = { image: number; video: number };
+
+export type Me = {
+  account: { uid: string; email: string; name: string; picture: string | null; role: Role | null } | null;
+  creator?: {
+    address: string;
+    name: string;
+    label: string | null;
+    youtube: { channelId: string; title: string | null; thumbnail: string | null } | null;
+    photo: string | null;
+    consentAt: number | null;
+    payout: string | null;
+    registeredTx: string | null;
+    agentTx: string | null;
+  } | null;
+  brand?: { image: { used: number; cap: number }; video: { used: number; cap: number } } | null;
+};
+
+/** A creator brands can license: Ana Reyes (synthetic) or a signed-in, YouTube-verified creator. */
+export type CreatorView = {
+  address: string;
+  synthetic: boolean;
+  name: string | null;
+  label: string | null;
+  photo: string | null;
+  youtube: { channelId: string; title: string | null; thumbnail: string | null; verifiedAt: number | null } | null;
+  agentCard: string;
+  registeredTx: string | null;
+  payout: string;
+  terms: { pricePerRender: string; price: string; maxRenders: number; categories: number; autoApprove: boolean };
+};
+
 export type Licence = {
   id: string;
   creator: string;
@@ -36,6 +75,51 @@ export type Licence = {
   pricePerRender: string;
   end: number;
   tx: string;
+  kind?: AdKind;
+  brief?: string | null;
+};
+
+/** One licence of a bundle (images or videos) with its on-chain counters. */
+export type BundleSlot = { licenceId: string; status: Licence["status"]; used: number; cap: number; price: string; pricePerRender: string; end: number } | null;
+
+/** A licence bundle: one request (one brief), one licence per media type on chain. */
+export type BundleView = {
+  id: string;
+  legacy: boolean;
+  creator: string;
+  creatorName: string | null;
+  brand: string | null;
+  brief: string;
+  wanted: { images: number; videos: number };
+  image: BundleSlot;
+  video: BundleSlot;
+  partial: boolean;
+  status: string;
+  createdAt: number;
+};
+
+/** A delivered render (gallery card): the record, the licence's status now, and the parties. */
+export type RenderView = {
+  assetHash: string;
+  licenceId: string;
+  renderIndex: number;
+  kind: AdKind;
+  mime: string;
+  size: number;
+  prompt: string | null;
+  promptSha256: string | null;
+  model: string | null;
+  note: string | null;
+  uid: string;
+  creator: string;
+  bundleId: string | null;
+  hspTx: string | null;
+  anchorTx: string | null;
+  createdAt: number;
+  licenceStatus?: string;
+  brand: string | null;
+  creatorName: string | null;
+  hasPoster: boolean;
 };
 
 export type Payment = {
@@ -64,11 +148,15 @@ export type Approval = {
   quoteExpiresAt: string;
 };
 
-export type JobState = "paying" | "submitted" | "recorded" | "delivered" | "paid-not-recorded" | "refused" | "failed";
+export type JobState = "paying" | "submitted" | "recorded" | "generating" | "delivered" | "paid-not-recorded" | "refused" | "failed";
 export type Job = {
   id: string;
   licenceId: string;
+  kind?: AdKind;
   state: JobState;
+  progress?: string;
+  mime?: string;
+  model?: string;
   renderIndex?: number;
   flowId?: string;
   paymentRequestId?: string;
@@ -79,6 +167,7 @@ export type Job = {
   anchorTx?: string;
   note?: string;
   error?: string;
+  promptSha256?: string;
 };
 export type HspStatus = { at: string; summary: string; status: string; tx?: string; attribution?: boolean };
 export type JobView = { job: Job; approvals: Approval[]; statuses: HspStatus[]; tx: string | null; attribution: boolean | null; toSeq: number };
@@ -99,10 +188,19 @@ export type Verdict = {
   recordTx?: string | null;
   anchorTx?: string | null;
   licenceEnd?: number;
+  bundle?: { id: string; brief: string; brand: string | null; imageLicence: string | null; videoLicence: string | null; kind: AdKind } | null;
+  render?: { kind: AdKind; prompt: string | null; promptSha256: string | null; model: string | null; createdAt: number } | null;
 };
 
+/** The Authorization header for the signed-in account, if any. */
+export async function idTokenHeader(): Promise<Record<string, string>> {
+  const token = await idToken().catch(() => undefined);
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
+
 export async function api<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, body === undefined ? { cache: "no-store" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const auth = await idTokenHeader();
+  const res = await fetch(path, body === undefined ? { cache: "no-store", headers: auth } : { method: "POST", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error || `HTTP ${res.status}`);
   return data as T;
@@ -120,15 +218,6 @@ export function rawToDecimal(raw: string, decimals: number) {
 
 export const usd = (units: string | number) => (Number(units) / 1e6).toFixed(2);
 
-export function gatewayLabel(g: Gateway) {
-  return {
-    hsp: "HSP Gateway: HashKey (live merchant credentials)",
-    emulator: "HSP Gateway: local emulator",
-    "hsp-agentic-qa": "HSP Agentic Payment: HashKey QA (MCP)",
-    "hsp-agentic-emulator": "HSP Agentic Payment: offline emulator (MCP)",
-  }[g];
-}
-
 /** sha256 of a file, as the 0x-hex the receipts are keyed by. Computed in the browser; nothing is uploaded. */
 export async function sha256Hex(file: Blob) {
   const d = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
@@ -143,11 +232,26 @@ export function saveBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-/** The brand downloads its own render: the brand agent signs the claim, the server checks it like anyone's. */
-export async function downloadAsBrand(assetHash: string, licenceId: string, renderIndex: number) {
+const EXT: Record<string, string> = { "image/svg+xml": ".svg", "image/jpeg": ".jpg", "image/png": ".png", "video/mp4": ".mp4" };
+
+/** The brand's own render: the brand agent signs the claim, the server checks it like anyone's. */
+export async function fetchRenderAsBrand(assetHash: string): Promise<Blob> {
   const claim = await api<{ issuedAt: string; signature: string }>("/api/brand/download", { assetHash });
   const res = await fetch(`/api/renders/${assetHash}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(claim) });
   if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
-  const blob = await res.blob();
-  saveBlob(blob, `likeness-render-${licenceId}-${renderIndex}${blob.type === "image/svg+xml" ? ".svg" : ".png"}`);
+  return res.blob();
 }
+
+export async function downloadAsBrand(assetHash: string, licenceId: string, renderIndex: number, blob?: Blob) {
+  const b = blob ?? (await fetchRenderAsBrand(assetHash));
+  saveBlob(b, `likeness-${licenceId}-${renderIndex}${EXT[b.type] ?? ""}`);
+}
+
+/** A render's file or poster, fetched with the sign-in token (renders have no public URL). */
+export async function authedBlob(path: string): Promise<Blob> {
+  const res = await fetch(path, { headers: await idTokenHeader() });
+  if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+  return res.blob();
+}
+
+export const fmtBytes = (n: number) => (n > 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);

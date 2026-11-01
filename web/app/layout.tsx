@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Poppins, Unbounded } from "next/font/google";
+import { AuthProvider } from "@/components/site/Auth";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import "./globals.css";
 
@@ -27,8 +28,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a href="#main" className="sr-only z-50 rounded-full bg-lime px-5 py-3 font-semibold text-ink focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
           Skip to content
         </a>
-        {children}
-        <SiteFooter />
+        <AuthProvider>
+          {children}
+          <SiteFooter />
+        </AuthProvider>
       </body>
     </html>
   );

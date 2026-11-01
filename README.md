@@ -18,27 +18,61 @@ What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 
 ## Try it: https://35-254-5-116.sslip.io
 
+> The public server is being redeployed with Google sign-in and AI ads (1 November); until then it runs the
+> earlier build, where operator actions use the demo password. This section describes the current code.
+
 The full app, running on HSK Chain testnet (chain 133) with HSP Agentic Payment through our offline MCP
 emulator until HashKey's QA server allowlists this server's address (35.254.5.116); the banner says which.
 
-The walk-through: **Creators → Ana Reyes → Request licence → Brand → Pay for next render → approval 1
-(before signing) → approval 2 (before submitting) → HSP status, recorded, receipt → Download → Verify →
-Creator dashboard → Revoke → Pay again (refused before anything is signed) → Verify (Revoked)**.
-"Behind the scenes" on the Brand page shows every A2A message, mandate and HSP call. The original console
-is at [/console](https://35-254-5-116.sslip.io/console).
+**Sign in with Google** at the top right (email and profile only), then choose once per Google account:
 
-- **Open to everyone:** the landing page, the creator's terms and licences, payments with explorer links,
-  **Verify** (drop a file: Licensed, Expired, Revoked or Unknown), How it works and the creator agent's A2A card.
-- **Operator actions** (request a licence, pay for a render with the two approvals, revoke): unlock them
-  with the **demo password** at the top right. It is not in this repository; judges get it from the team with
-  the submission (ask us if you don't have it).
-- **Limits:** at most 10 paid renders a day (UTC), 0.05 test USDT each, one payment at a time, per-address
-  rate limits. Everything is testnet: the tokens have no value.
-- The server has its own testnet-only wallets (creator `0xD2925E4A…29ca9`, brand `0x8E9B246D…4DDec`);
-  its keystores are encrypted and their password lives in Google Secret Manager.
+- **Brand:** Creators → a creator → request a **licence bundle** (one brief, a number of images and
+  videos) → Dashboard → **Make image** or **Make video** → edit the prompt (pre-filled with the exact text
+  the model receives) → approval 1 (before signing) → approval 2 (before submitting) → HSP status, recorded
+  on chain, AI generation, receipt → preview and Download → **Verify**. Each bundle keeps a gallery of its
+  renders; "Behind the scenes" shows every A2A message, mandate and HSP call.
+- **Creator:** Connect YouTube (read-only, once; Google may show its "unverified app" screen for that
+  permission: Advanced → Go to Likeness) → your photo, with an explicit consent box → your terms →
+  **Register on HSK Chain**. Your dashboard lists every bundle of your likeness with **Revoke** (both of its
+  licences), the payments you received, and **Ads made with your likeness** across all brands.
+- **Open to everyone:** the landing page, creators and their terms, **Verify** (drop a file: Licensed,
+  Expired, Revoked or Unknown, with the bundle and the exact prompt), How it works and the A2A agent cards.
+- **Ana Reyes** is the synthetic demo creator (an illustration, no photo), so her ads are marked TEST RENDERs.
+- **Limits:** AI ads per UTC day: 3 images and 1 video per brand account, 10 images and 2 videos across the
+  server; at most 0.05 test USDT per image and 0.15 per video (8 s); one payment at a time; per-address rate
+  limits. Everything is testnet: the tokens have no value.
+- **Wallets:** payments come from the server's shared demo brand agent wallet (`0x8E9B246D…4DDec`) on behalf of
+  every brand account; each creator gets a custodial testnet wallet, encrypted on the server. The admin
+  fallback (`/admin`, demo password) is for the team.
 
 The web UI (`web/`, Next.js) was rebuilt during the hackathon from the design of Rohit's earlier
 Likeness project; what is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
+
+## Sign-in, creators and AI ads
+
+- **Google sign-in** through Firebase Auth (project `likeness-hsk`). The browser sends its Firebase ID token;
+  the server checks it against Google's public keys (issuer, audience, expiry), so no secret is involved.
+  Accounts, roles, bundles and render records live in SQLite on the server's disk.
+- **Creators are verified by their YouTube channel:** the creator grants `youtube.readonly` once; the server
+  checks the token belongs to the signed-in Google account, reads `channels.list mine=true` (id, title,
+  picture) and keeps no token. The photo is stored only with the consent box ticked (JPEG metadata such as
+  GPS is stripped). Registering creates a custodial testnet wallet; the platform's attester signs an
+  attestation (`google-youtube-channel`, the creator's own 18+ declaration, the photo's sha256) and the wallet
+  registers the terms on CreatorRegistry and names the shared creator agent in HspSettlement. Only the
+  signed-in creator can revoke their licences, signed by their own wallet.
+- **AI ads (Vertex AI, project `likeness-hsk`, no API keys):** an image is made by `gemini-nano-banana-2.1`
+  from the creator's consented photo; a video is that image as the opening frame of an 8 s, 720p, silent
+  `veo-3.1-lite-generate-001` clip. Generation starts only after the payment is recorded on chain. Every
+  output carries a visible **"AI-generated · licensed via Likeness"** label burned into the pixels, so the
+  receipt's sha256 covers the labelled JPEG or MP4. If generation fails, a marked TEST RENDER is delivered.
+- **Editable prompts:** before each render the brand sees, and may edit, the exact text sent to the model(s).
+  The brief and every edited prompt are checked before anything is signed or paid: keyword rules for the
+  five banned uses (political, adult, minors, impersonation, deception), a Gemini classifier (fail closed),
+  and the creator's allowed uses on chain. The prompt is recorded with the render; Verify shows it and its
+  sha256.
+- **Galleries:** a brand sees its own renders under each bundle; a creator sees every render of their
+  likeness, by brand, with "since revoked" on a revoked bundle's renders. Files load with the sign-in token:
+  renders have no public URL, and anyone else checks a file through Verify.
 
 ## Live on HSK Chain testnet (chain 133)
 
@@ -141,6 +175,24 @@ sequenceDiagram
 - **ReceiptAnchor:** one receipt per delivered file hash.
 - **HspSettlement:** the HSP payment binding. It is the only writer of renders and receipts.
 
+## Licence bundles: one request, one licence per media type on chain
+
+A brand asks a creator once: one brief, one duration, a number of images and a number of videos. Likeness
+issues that as a **licence bundle**, which on HSK Chain is **one licence per media type**, taken in
+sequence by the brand's agent with the creator's agent over A2A:
+
+- **images:** a licence at the creator's price per render, with a render cap equal to the number of images;
+- **videos:** a licence at 3× that price (a video is 8 s of Veo and costs more to make), capped at the
+  number of videos. A count of 0 means no licence of that type.
+
+The contracts are unchanged: `LicenseRegistry.request` accepts any price at or above the creator's terms,
+and `HspSettlement.recordPayment` records exactly the licence's price, so each image or video is one HSP
+payment checked to the unit on chain. The bundle itself (its id, the brief, which two licences belong
+together) lives in the app's database. If the second licence fails to issue, the bundle shows as partly
+issued with a retry. The brand's dashboard shows one card per bundle ("Images 1/3 · Videos 0/1") with
+**Make image** and **Make video**; the creator's **Revoke** revokes both licences (one transaction each),
+after which both are refused before anything is signed; Verify shows the bundle for either file.
+
 ## What the chain proves, and what an agent attests
 
 - **Proven on chain:**
@@ -195,12 +247,24 @@ sequenceDiagram
   [faucet](https://hskchain.net/faucet) gives testnet HSK only, so payments on testnet use our own
   TestUSDT, which has no value. On mainnet, HSP's own USDT is used.
 - **Amount and recipient** are attested by the creator's agent, not proven on chain (see above).
-- **Renders:** a marked TEST RENDER by default. Gemini renders only when an API key is set.
+- **AI ads cost money:** Vertex AI bills each image (about $0.04–0.07) and each second of video ($0.03 at 720p),
+  so ads are capped per day (see above) and the project has a budget alert. Without `LIKENESS_AI=vertex`, or
+  if generation fails, a marked TEST RENDER is delivered.
+- **Google's "unverified app" screen:** connecting YouTube asks for the sensitive `youtube.readonly`
+  permission, and the app hasn't been through Google's verification, so creators see Google's warning once.
+  Sign-in itself asks for email and profile only.
+- **Custodial, shared wallets:** creators' wallets are custodial (encrypted on the server, testnet only), and
+  every brand account pays from one shared demo brand agent wallet; a production system would let both bring
+  their own wallets.
+- **Revoking a used-up licence:** `LicenseRegistry.revoke` accepts only active licences, so a bundle's
+  licence whose renders are all used stays "Exhausted"; Revoke revokes the bundle's licences that are still
+  active.
 - **No C2PA in this build:** the earlier Likeness projects signed a C2PA content credential into each
   render; this build drops it (a native module, and little value on SVG test renders). Verify relies on the
   on-chain receipt keyed by the file's sha256, anchored only after the HSP payment was recorded.
-- **One demo creator:** Ana Reyes is the demo creator on this deployment, attested by our own attester, not a
-  KYC provider. Her portrait and the landing photos are the ones from the earlier Likeness app (likeness-arc).
+- **Creator verification is ours, not KYC:** a creator's attestation is our attester's check of their YouTube
+  channel plus their own 18+ declaration. Ana Reyes is synthetic (an illustration); the landing photos are the
+  ones from the earlier Likeness app (likeness-arc).
 - **Single instance:** one process holds the agents' state. A production deployment would use a
   persistent store.
 
@@ -209,18 +273,21 @@ sequenceDiagram
 ```sh
 git clone --recurse-submodules https://github.com/rohitshukla11/likeness-hsk && cd likeness-hsk
 (cd contracts && forge build && forge test)            # 79 contract tests; fork suites run with HSK_RPC_URL / HSK_TESTNET_RPC_URL
-cd agents && pnpm install && pnpm test                 # 64 agent tests (anvil from Foundry needed)
+cd agents && pnpm install && pnpm test                 # 84 agent tests (anvil from Foundry needed)
 LIKENESS_MODE=local pnpm app                           # http://127.0.0.1:8788: a local chain, no keys needed
 LIKENESS_HSP=agentic LIKENESS_MODE=local pnpm app      # the same with HSP Agentic Payment (MCP emulator) and the approvals
 pnpm run vm keys && pnpm run vm setup                  # the public server's own testnet wallets (dry run; --broadcast sends)
-cd ../web && pnpm install && pnpm dev                  # the web UI on http://localhost:3000, over the agents app on 8788
+LIKENESS_AI=vertex LIKENESS_HSP=agentic pnpm app       # testnet with real AI ads (the project's keystores; Vertex AI through the likeness-hsk gcloud config)
+cd ../web && pnpm install && pnpm build && pnpm start  # the web UI on http://localhost:3000, over the agents app on 8788
+                                                       # Google sign-in needs web/.env.local with NEXT_PUBLIC_FIREBASE_* (public web config)
 ```
 
 **Pages (web UI):**
-- **Creators** and **Ana Reyes**: her on-chain terms and the licence request.
-- **Brand:** pay for a render with the two approvals, HSP's status, each step with explorer links, the
-  download, and "Behind the scenes" (every A2A message, mandate and HSP call).
-- **Creator dashboard:** licences, payments received, revoke.
+- **Creators** and each creator's profile: on-chain terms and the licence bundle request.
+- **Dashboard**, by role: choose Brand or Creator; creator onboarding (YouTube, photo, terms, register);
+  the brand console (bundles with Make image / Make video, the editable prompt, the two approvals, HSP's
+  status, each step with explorer links, the result, galleries, "Behind the scenes"); the creator's bundles,
+  revoke, payments and "Ads made with your likeness".
 - **Verify:** Licensed / Expired / Revoked / Unknown for any file. **How it works:** the flow and the contracts.
 - The original console (`agents/public`) is served at `/console` by the agents app.
 
@@ -235,6 +302,7 @@ cd ../web && pnpm install && pnpm dev                  # the web UI on http://lo
 | `agents/src/hsp` | The HSP client (HMAC, ES256K cart JWT, AP2 mandates, Permit2 and EIP-3009 signatures, webhooks) and the Gateway emulator |
 | `agents/src/a2a` | A2A agent card, JSON-RPC `message/send`, tasks |
 | `agents/src/app`, `agents/public` | The demo app |
+| `agents/src/ai` | AI image and video ads on Vertex AI: prompts, the brief and prompt check, the burned-in label |
 | `agents/scripts` | `deploy`, `fund`, `safe`, `verify`, `run` (testnet or mainnet), `recover`, `hsp:check` |
 | `deployments/` | Public addresses and transaction hashes |
 | `docs/` | [HACKATHON](docs/HACKATHON.md) (reused vs new), [HSP_SETUP](docs/HSP_SETUP.md), [MAINNET_RUNBOOK](docs/MAINNET_RUNBOOK.md) |

@@ -100,7 +100,7 @@ export function guardFromEnv(capFile: string): Guard | undefined {
     reads: new RateLimit(300),
     actions: new RateLimit(20),
     logins: new RateLimit(5),
-    cap: new DailyCap(capFile, 10),
+    cap: new DailyCap(capFile, Number(process.env.LIKENESS_DAILY_CAP ?? 20)),
   };
 }
 

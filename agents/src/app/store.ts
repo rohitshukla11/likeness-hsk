@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Hex } from "viem";
 
@@ -18,6 +18,35 @@ export class RenderStore {
     const p = this.paths(hash);
     writeFileSync(p.file, bytes);
     writeFileSync(p.meta, JSON.stringify(meta));
+  }
+
+  /** A video's poster frame (JPEG), shown in galleries before the video is loaded. */
+  savePoster(hash: Hex, jpeg: Uint8Array) {
+    writeFileSync(`${this.paths(hash).file.slice(0, -4)}.poster.jpg`, jpeg);
+  }
+
+  readPoster(hash: Hex): Buffer | undefined {
+    const p = `${this.paths(hash).file.slice(0, -4)}.poster.jpg`;
+    return existsSync(p) ? readFileSync(p) : undefined;
+  }
+
+  /** Every stored render with its metadata, size and time (for records made before render records existed). */
+  list(): { hash: Hex; mime: string; licenceId: string; renderIndex: number; size: number; mtime: number }[] {
+    return readdirSync(this.dir)
+      .filter((f) => /^0x[0-9a-f]{64}\.json$/.test(f))
+      .flatMap((f) => {
+        const hash = f.slice(0, -5) as Hex;
+        const bin = join(this.dir, `${hash}.bin`);
+        if (!existsSync(bin)) return [];
+        const meta = JSON.parse(readFileSync(join(this.dir, f), "utf8")) as { mime: string; licenceId: string; renderIndex: number };
+        const st = statSync(bin);
+        return [{ hash, mime: meta.mime, licenceId: meta.licenceId, renderIndex: meta.renderIndex, size: st.size, mtime: st.mtimeMs }];
+      });
+  }
+
+  /** Bytes on disk: files and posters. */
+  totalBytes(): number {
+    return readdirSync(this.dir).reduce((n, f) => n + statSync(join(this.dir, f)).size, 0);
   }
 
   read(hash: Hex): { bytes: Buffer; mime: string } | undefined {

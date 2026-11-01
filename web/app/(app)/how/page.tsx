@@ -7,7 +7,7 @@ import { Addr } from "@/components/ui";
 
 const FLOW = [
   ["Terms on chain", "The creator's price per render, allowed uses, regions, cap and maximum duration live in CreatorRegistry. Political, adult and deceptive uses are banned in the contract."],
-  ["A2A request", "The brand's payment agent finds the creator's agent from its A2A card and asks for a licence; the licence is issued on chain within her terms."],
+  ["A2A request, a licence bundle", "The brand's payment agent finds the creator's agent from its A2A card and asks once: one brief, N images, M videos. On chain that's one licence per media type: images at the creator's price, videos at 3×."],
   ["HSP order", "For each render the creator's agent calls HSP's create_order (merchant Likeness), paid to the creator's payout."],
   ["Policy check", "The brand's agent checks the order: the payee is the creator's payout, the price fits her terms and the brand's budget, the licence is active."],
   ["Approval 1, then sign", "prepare_payment returns the authorization to sign. A person approves (recipient, payer, token_total_raw), and the brand wallet signs exactly that EIP-712, unchanged."],

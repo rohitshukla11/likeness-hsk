@@ -12,9 +12,8 @@ import { useState } from "react";
 import { pillClass } from "@/components/ds";
 import { IconArrowLeft, IconArrowRight, IconChevron } from "@/components/ds/icons";
 import { useCountUp, useInView } from "@/components/ds/motion";
-import { OperatorGate } from "@/components/site/OperatorGate";
+import { SignIn } from "@/components/site/SignIn";
 import { BUILT_ON, MEASUREMENTS, TESTIMONIALS } from "@/lib/site-content";
-import { useBackend } from "@/lib/useBackend";
 
 
 const RIBBON_A = ["Advertising", "✳", "Social", "✳", "Editorial", "✳", "Entertainment", "✳", "Product", "✳"];
@@ -50,7 +49,6 @@ function Ribbon({ words, dir, className, style }: { words: string[]; dir: "l" | 
 }
 
 function Hero() {
-  const { state, refresh } = useBackend();
   return (
     <section className="relative overflow-hidden bg-[linear-gradient(160deg,#D4F06A_0%,#E4F7A0_38%,#F2FAD6_100%)]">
       <svg aria-hidden="true" viewBox="0 0 1440 900" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
@@ -80,7 +78,7 @@ function Hero() {
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-4">
-          <OperatorGate state={state} onChange={() => void refresh()} light />
+          <SignIn light />
         </div>
       </header>
 

@@ -1,2 +1,5 @@
 allowBuilds:
+  # their install step only marks the binary executable; src/ai/generate.ts does that itself
+  '@ffmpeg-installer/darwin-arm64': false
+  '@ffmpeg-installer/linux-x64': false
   esbuild: false

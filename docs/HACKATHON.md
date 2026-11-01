@@ -205,14 +205,45 @@ address 35.254.5.116, behind Caddy with Let's Encrypt on https://35-254-5-116.ss
 @ea40c8e, `web/`, in commit de3cc4e "port from likeness-arc", then edited): the design system
 (`components/ds`, `app/globals.css`), the landing page, header and footer, the creator card, the Verify page's
 layout, `components/ui.tsx` helpers, the Next.js and Tailwind setup (same pinned versions), the abstract
-card backgrounds, and the landing photos (portraits and avatars, `public/landing/`), also used for the demo
-creator's portrait.
+card backgrounds, and the landing photos (portraits and avatars, `public/landing/`). The demo creator Ana
+Reyes is a vector illustration drawn for this project (`public/demo/ana-reyes.svg`).
 
 **Rebuilt for HSK during the hackathon:** every data path. The UI is a front end only; Next.js proxies `/api`,
 `/a2a`, `/.well-known` and `/console` to the agents backend. New: `lib/api.ts` (the backend's types),
 `lib/steps.ts` (the HSP Agentic Payment steps), the creator profile with the licence request, the brand console
 (`components/brand/PaymentFlow.tsx`: approval 1 before signing, approval 2 before submitting, HSP's statuses,
 the steps, the result and download, "Behind the scenes"), the creator dashboard with revoke, Verify on the
-on-chain receipt (sha256 in the browser), How it works, the HSP mode banner and the demo-password unlock. All
+on-chain receipt (sha256 in the browser), How it works, and the demo-password Login. All
 Arc copy, Arc and USDC constants, Dynamic wallets, Didit, Mera, C2PA signing, the escrow and arc's server code
 were left out. The original console stays at `/console`.
+
+## 31 October – 1 November: Google sign-in, real creators, AI image and video ads
+
+**New:**
+- Google sign-in (Firebase Auth in project `likeness-hsk`; ID tokens checked by the server with Google's public
+  keys), one Dashboard by role, and the demo password kept only as an admin fallback (`/admin`).
+  `agents/src/app/firebase.ts`, `accounts.ts` (SQLite: accounts, creators, bundles, render records, caps),
+  `web/lib/firebase.ts`, `components/site/Auth.tsx`, `SignIn.tsx`, `app/(app)/dashboard`.
+- Creator onboarding (`agents/src/app/onboarding.ts`): YouTube channel check (`youtube.readonly` once,
+  `channels.list mine=true`, no token kept), the consented photo (EXIF stripped), a custodial testnet wallet,
+  our attestation and on-chain registration; only the creator revokes their own licences. Each registered
+  creator gets their own A2A endpoint served by the shared creator agent (`/api/agents/<address>`).
+- Licence bundles (`agents/src/app/bundles.ts`): one request is one licence per media type on chain (images at
+  the creator's price, videos at 3×, no contract change), with partial issue and retry, revoke of both, and
+  the bundle on Verify.
+- AI ads (`agents/src/ai/`): Vertex AI image generation from the creator's photo and Veo image-to-video, the
+  visible label burned in with `sharp` and ffmpeg, caps per brand and per server, editable prompts recorded
+  with their sha256, video posters, and private galleries for brands and creators
+  (`web/components/dashboard/RenderCard.tsx`).
+- Log reads in chunks (`listLicences`, `listPayments`): HSK testnet's RPC rejects `eth_getLogs` ranges of
+  about 5,000 blocks or more.
+
+**Reused from Rohit's earlier project likeness-ai** (read at @feb1f27, rewritten here, not copied as files):
+the brief filter's banned-use keyword rules and the Gemini classifier's instruction and JSON schema
+(`agents/src/ai/filter.ts`); the shape of the image prompt (a consenting adult, faithful likeness, no text,
+then the brief) and of the Vertex AI calls (`generateContent` on the global endpoint with retries;
+Veo `predictLongRunning` then `fetchPredictOperation`, `personGeneration: allow_adult`); the YouTube channel
+check through `channels.list mine=true`; and the gallery card's layout (preview left, details and actions
+right). likeness-ai's face-match quality gate, C2PA signing, KMS receipts, Firestore and Cloud Storage were
+not used.
+

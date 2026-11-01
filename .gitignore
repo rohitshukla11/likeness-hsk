@@ -22,6 +22,7 @@ contracts/broadcast/*/*/run-[0-9]*.json
 # ------------------------------------------------ biometric data and renders: never committed
 captures/
 renders/
+accounts/
 
 # ------------------------------------------------ editor and OS
 .DS_Store
@@ -29,6 +30,7 @@ renders/
 
 # local run logs (public data, regenerated each run)
 deployments/*.jsonl
+deployments/*-paid-today.json
 deployments/rehearsal/
 
 # submission kit (local: BUIDL text, video script, screenshots)

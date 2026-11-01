@@ -145,13 +145,22 @@ export function BehindTheScenes({ events }: { events: LogEvent[] }) {
   );
 }
 
-export function PaidResult({ view, onDownload, downloading }: { view: JobView; onDownload: () => void; downloading: boolean }) {
+export function PaidResult({ view, onDownload, downloading, preview }: { view: JobView; onDownload: () => void; downloading: boolean; preview?: { url: string; mime: string } | null }) {
   const j = view.job;
   return (
     <section aria-label="Result" className="flex flex-col gap-2 rounded-[20px] bg-white p-[18px] sm:px-5">
       <h2 className="m-0 text-[18px] font-bold">
-        Render {j.renderIndex} of licence #{j.licenceId}: paid, recorded and delivered
+        {j.kind === "video" ? "Video" : "Image"} ad {j.renderIndex} of licence #{j.licenceId}: paid, recorded and delivered
       </h2>
+      {preview &&
+        (preview.mime.startsWith("video/") ? (
+          <video src={preview.url} controls autoPlay muted loop playsInline className="w-full rounded-[14px] bg-ink" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview.url} alt={`The ${j.kind === "video" ? "video" : "image"} ad`} className="w-full rounded-[14px] bg-paper object-contain" />
+        ))}
+      {j.note && <p className="m-0 text-[13px] text-grey">{j.note}</p>}
+      {j.model && <p className="m-0 text-[13px] text-grey">Made with {j.model} on Vertex AI, from the creator&apos;s consented photo, after the payment was recorded.</p>}
       <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-1 text-[14px] sm:grid-cols-[10rem_1fr]">
         <dt className="text-grey">HSP payment</dt>
         <dd className="m-0">{j.hspTx ? <Tx hash={j.hspTx} /> : "—"}</dd>
