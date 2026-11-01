@@ -162,7 +162,12 @@ Safe                 ${dep.safe}, threshold ${threshold}, owners ${owners.join("
     const hash = await w.writeContract({ address: dep.safe, abi: safeAbi, functionName: "execTransaction", args: [dep.creators, 0n, data, 0, 0n, 0n, 0n, zero, zero, concat([pad(deployer.address, { size: 32 }), pad("0x00", { size: 32 }), "0x01"])] });
     const r = await pub.waitForTransactionReceipt({ hash });
     if (r.status !== "success") throw new Error(`setAttester reverted: ${dep.explorer}/tx/${hash}`);
-    const now = await pub.readContract({ address: dep.creators, abi: registryAbi, functionName: "attester" });
+    // A load-balanced RPC can answer from a node a block behind: read until it shows the change.
+    let now = current;
+    for (let i = 0; i < 20 && now.toLowerCase() !== attester.address.toLowerCase(); i++) {
+      await new Promise((res) => setTimeout(res, 1000));
+      now = await pub.readContract({ address: dep.creators, abi: registryAbi, functionName: "attester" });
+    }
     console.log(`Safe: setAttester    ${dep.explorer}/tx/${hash}\n  attester now       ${now}`);
   }
 } else if (args[0] === "topup") {
