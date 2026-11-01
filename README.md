@@ -18,9 +18,6 @@ What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 
 ## Try it: https://35-254-5-116.sslip.io
 
-> The public server is being redeployed with Google sign-in and AI ads (1 November); until then it runs the
-> earlier build, where operator actions use the demo password. This section describes the current code.
-
 The full app, running on HSK Chain testnet (chain 133) with HSP Agentic Payment through our offline MCP
 emulator until HashKey's QA server allowlists this server's address (35.254.5.116); the banner says which.
 
