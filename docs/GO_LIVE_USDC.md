@@ -57,9 +57,12 @@ transferOwnership to the Safe, then acceptOwnership executed by the Safe.
 server's creator agent on the new HspSettlement for the server's own creator; the render agent is already
 allowed (step 1). Nothing is minted (USDC is HashKey's).
 
-**5. On the server** (IAP SSH): copy `deployments/testnet.json` to `/opt/likeness/deployments/` (keep the old
-one as `testnet.json.before-usdc`), then append to `/etc/likeness.env` (append, never overwrite: it also holds
-`LIKENESS_AI` and `LIKENESS_DEMO_CREATOR`):
+**5. On the server** (IAP SSH): deploy the backend at the commit that has the archive and the Verify fallback
+(9ed6201 or later: `git archive` of `agents/`, unpacked into `/opt/likeness/agents`, `pnpm install
+--frozen-lockfile` as the app's user with `XDG_CONFIG_HOME=/opt/likeness/.local/config`); copy
+`deployments/testnet.json` to `/opt/likeness/deployments/` (keep the old one as `testnet.json.before-usdc`),
+then append to `/etc/likeness.env` (append, never overwrite: it also holds `LIKENESS_AI` and
+`LIKENESS_DEMO_CREATOR`):
 
 ```
 HSP_ALLOWLISTED=1
