@@ -423,13 +423,24 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
   if (req.method === "GET" && path === "/api/verify") {
     const hash = url.searchParams.get("hash") as Hex | null;
     if (!hash || !/^0x[0-9a-fA-F]{64}$/.test(hash)) return json(res, 400, { error: "hash must be a 0x-prefixed sha256" });
-    const [found, r] = await rt.chain.receiptOf(hash);
+    // The current contracts first, then those a redeploy replaced (a file anchored there still verifies).
+    let ch = rt.chain;
+    let [found, r] = await ch.receiptOf(hash);
+    for (const p of found ? [] : (rt.previous ?? [])) {
+      const x = await p.receiptOf(hash);
+      if (x[0]) {
+        [found, r] = x;
+        ch = p;
+        break;
+      }
+    }
+    const previous = ch !== rt.chain;
     if (!found) return json(res, 200, { verdict: "Unknown", reason: "no receipt for these exact bytes (edited, re-encoded or never licensed)" });
     const [lic, status, payment, recorded] = await Promise.all([
-      rt.chain.licence(r.licenceId),
-      rt.chain.status(r.licenceId),
-      rt.chain.payment(r.licenceId, r.renderIndex),
-      listPayments(rt, { licenceId: r.licenceId, renderIndex: r.renderIndex }),
+      ch.licence(r.licenceId),
+      ch.status(r.licenceId),
+      ch.payment(r.licenceId, r.renderIndex),
+      previous ? Promise.resolve([] as Awaited<ReturnType<typeof listPayments>>) : listPayments(rt, { licenceId: r.licenceId, renderIndex: r.renderIndex }),
     ]);
     const verdict = status === "Revoked" ? "Revoked" : status === "Expired" ? "Expired" : "Licensed";
     return json(res, 200, {
@@ -447,6 +458,8 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
       recordTx: recorded[0]?.recordTx ?? null,
       anchorTx: recorded[0]?.anchorTx ?? null,
       licenceEnd: Number(lic.end),
+      // Anchored under the contracts a redeploy replaced (before the move to HSP's token).
+      ...(previous ? { deployment: "previous", contracts: { licences: ch.d.licences, receipts: ch.d.receipts, settlement: ch.d.settlement, token: ch.d.token } } : {}),
       // What was generated: the render record's exact prompt and its sha256 (no file or brand data beyond that).
       render: (() => {
         const rec = rt.accounts.render(hash);
@@ -454,7 +467,7 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
       })(),
       // The licence bundle this file was made under: one licence per media type on chain.
       bundle: (() => {
-        const b = rt.accounts.bundleOfLicence(r.licenceId.toString());
+        const b = previous ? undefined : rt.accounts.bundleOfLicence(r.licenceId.toString());
         return b ? { id: b.id, brief: b.brief, brand: rt.accounts.account(b.uid)?.name ?? null, imageLicence: b.imageLicence, videoLicence: b.videoLicence, kind: b.videoLicence === r.licenceId.toString() ? "video" : "image" } : null;
       })(),
     });

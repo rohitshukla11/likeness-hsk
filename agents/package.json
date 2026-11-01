@@ -23,7 +23,8 @@
     "hsp:agentic": "tsx scripts/hsp-agentic.ts",
     "safe": "tsx scripts/safe.ts",
     "verify": "tsx scripts/verify.ts",
-    "demo": "tsx scripts/run.ts"
+    "demo": "tsx scripts/run.ts",
+    "creator-agents": "tsx scripts/creator-agents.ts"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "1.1.0",

@@ -54,6 +54,7 @@ create table if not exists bundles (
   id text primary key, uid text not null, creator text not null, brief text not null, images integer not null, videos integer not null,
   duration integer not null, image_licence text, video_licence text, created_at integer not null
 );
+create table if not exists meta (key text primary key, value text not null);
 create table if not exists renders (
   asset_hash text primary key, licence_id text not null, render_index integer not null, kind text not null, mime text not null,
   size integer not null, prompt text, prompt_sha256 text, model text, note text, uid text not null, creator text not null,
@@ -308,7 +309,41 @@ export class Accounts {
   }
 
   render(assetHash: string): RenderRecord | undefined {
-    return this.renderRow(this.db.prepare("select * from renders where lower(asset_hash) = lower(?)").get(assetHash));
+    const r = this.db.prepare("select * from renders where lower(asset_hash) = lower(?)").get(assetHash);
+    if (r || !this.hasTable("archived_renders")) return this.renderRow(r);
+    // A render made under a previous deployment: its record (prompt, model) stays readable for Verify.
+    return this.renderRow(this.db.prepare("select * from archived_renders where lower(asset_hash) = lower(?)").get(assetHash));
+  }
+
+  private hasTable(name: string): boolean {
+    return !!this.db.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(name);
+  }
+
+  /**
+   * The app's records are tied to one LicenseRegistry (licence ids start again on a new one). When the
+   * deployment changes, its licences, bundles and render records move to archived_* tables, tagged with
+   * the registry they belonged to; accounts, creators and today's caps stay. Returns the rows moved.
+   */
+  ensureDeployment(licences: string): number {
+    const cur = (this.db.prepare("select value from meta where key = 'licences'").get() as { value: string } | undefined)?.value;
+    if (cur?.toLowerCase() === licences.toLowerCase()) return 0;
+    let moved = 0;
+    this.db.exec("begin");
+    try {
+      if (cur) {
+        for (const t of ["licences", "licence_meta", "bundles", "renders"]) {
+          this.db.exec(`create table if not exists archived_${t} as select '' as deployment, * from ${t} where 0`);
+          moved += Number(this.db.prepare(`insert into archived_${t} select ?, * from ${t}`).run(cur).changes);
+          this.db.exec(`delete from ${t}`);
+        }
+      }
+      this.db.prepare("insert into meta (key, value) values ('licences', ?) on conflict(key) do update set value = excluded.value").run(licences);
+      this.db.exec("commit");
+    } catch (e) {
+      this.db.exec("rollback");
+      throw e;
+    }
+    return moved;
   }
 
   /** Newest first: a brand account's renders, a creator's (their likeness), or all. */

@@ -60,6 +60,8 @@ export interface Runtime {
   agentFor(creator: Address): CreatorAgent | undefined;
   /** The brand agent's connection to a creator's agent (its A2A card). */
   connectTo(creator: Address): Promise<CreatorConnection>;
+  /** Contracts this deployment replaced (same chain): Verify still answers for files anchored there. */
+  previous?: Likeness[];
   /** Who a render is of: the creator's name and consented photo (registered creators). */
   subjectOf(creator: Address): RenderSubject | undefined;
   stop(): void;
@@ -91,6 +93,8 @@ function accountsFor(o: {
   const dir = `${o.root}accounts/${o.mode}`;
   // The local devnet is a fresh chain each run, so its accounts are too.
   const accounts = new Accounts(o.mode === "local" ? ":memory:" : `${dir}/accounts.sqlite`);
+  const moved = accounts.ensureDeployment(o.chain.d.licences);
+  if (moved) o.log.add("chain", "info", `new deployment (LicenseRegistry ${o.chain.d.licences}): ${moved} licence, bundle and render records archived; accounts and creators kept`);
   const onboarding = new Onboarding({
     accounts,
     chain: o.chain,
@@ -374,6 +378,9 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     creator: creator.address,
     brandAddress: brandKey.address,
     startBlock: BigInt(dep.startBlock ?? 0),
+    previous: ((dep.previousDeployments ?? []) as { licences: Address; receipts: Address; settlement: Address; token: Address; tokenSymbol: string; rail: Deployment["rail"] }[]).map(
+      (p) => new Likeness({ ...d, licences: p.licences, receipts: p.receipts, settlement: p.settlement, token: p.token, tokenSymbol: p.tokenSymbol, rail: p.rail }, pub),
+    ),
     connect: connectAna,
     brandAccount: () => brandKey,
     revoke: async (id) => {

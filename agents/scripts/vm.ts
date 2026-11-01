@@ -73,12 +73,16 @@ if (args[0] === "keys") {
     if (has >= want / 2n) console.log(`${n.padEnd(14)} already has ${formatEther(has)} HSK`);
     else await send(`${n}: +${formatEther(want - has)} HSK`, deployer, { to: vm[n].address, value: want - has });
   }
-  // 2. Test USDT for the new brand (the deployment's TestUSDT; the deployer may mint).
-  if (!dep.testToken) throw new Error("the deployment's token isn't our test token");
+  // 2. Test USDT for the new brand (the deployment's TestUSDT; the deployer may mint). A real token (HSP's
+  //    USDC after the redeploy for HashKey QA) is funded by HashKey, not minted here.
+  const minted = !!dep.testToken;
+  if (!minted) console.log(`token ${dep.tokenSymbol} ${dep.token} isn't our test token: the brand is funded by HashKey, nothing minted`);
+  else {
   const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function mint(address,uint256)"]);
   const usdt = await pub.readContract({ address: dep.token, abi: erc20, functionName: "balanceOf", args: [vm.brand.address] });
   if (usdt >= 500_000n) console.log(`brand already has ${usdt} USDT base units`);
   else await send("mint 1 test USDT to the brand", deployer, { address: dep.token, abi: erc20 as Abi, functionName: "mint", args: [vm.brand.address, 1_000_000n] });
+  }
   // 3. The new creator: registered with the attester's signature, terms 0.05 USDT a render.
   if (await pub.readContract({ address: dep.creators, abi: creatorRegistryAbi, functionName: "isRegistered", args: [vm.creator.address] })) console.log("creator already registered");
   else {
@@ -119,7 +123,9 @@ if (args[0] === "keys") {
     await send("Safe: setRenderAgent(VM render agent)", deployer, { address: dep.safe, abi: safeAbi as Abi, functionName: "execTransaction", args: [dep.settlement, 0n, data, 0, 0n, 0n, 0n, zero, zero, prevalidated] });
   }
 
-  console.log(`\nFor Rohit to run (the new brand approves Permit2 for 1 test USDT; cast asks nothing, the password is read from the file):
+  if (dep.rail !== "permit2") {
+    console.log(`\n${dep.tokenSymbol} uses ${dep.rail}: no approval transaction (each payment is an EIP-3009 authorization).`);
+  } else console.log(`\nFor Rohit to run (the new brand approves Permit2 for 1 test USDT; cast asks nothing, the password is read from the file):
 cast send ${dep.token} "approve(address,uint256)" ${dep.permit2} 1000000 \\
   --keystore .secrets/vm/keystores/brand --password-file .secrets/vm/keystore-password --rpc-url ${dep.rpcUrl}`);
 } else if (args[0] === "attester") {

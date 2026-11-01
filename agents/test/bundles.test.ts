@@ -174,4 +174,23 @@ describe("licence bundles: one request, one licence per media type on chain (loc
     expect((await file("other", h)).status).toBe(403);
     expect((await file(null, h)).status).toBe(401);
   }, 60_000);
+
+  it("Verify still answers for a file anchored under a deployment that was replaced", async () => {
+    const [r] = (await call("brand", "/api/renders?who=brand")).body.renders;
+    const current = rt.chain;
+    const original = current.receiptOf.bind(current);
+    // The current ReceiptAnchor doesn't know the file; the replaced one (here, the same contracts) does.
+    rt.previous = [Object.assign(Object.create(Object.getPrototypeOf(current)), current, { receiptOf: original })];
+    current.receiptOf = (async () => [false, { licenceId: 0n, renderIndex: 0, timestamp: 0n }]) as unknown as typeof current.receiptOf;
+    try {
+      const v = (await call(null, `/api/verify?hash=${r.assetHash}`)).body;
+      expect(v).toMatchObject({ deployment: "previous", licenceId: r.licenceId, bundle: null });
+      expect(["Licensed", "Revoked", "Expired"]).toContain(v.verdict);
+    } finally {
+      current.receiptOf = original;
+      rt.previous = [];
+    }
+    expect((await call(null, `/api/verify?hash=${r.assetHash}`)).body.deployment).toBeUndefined();
+  });
 });
+

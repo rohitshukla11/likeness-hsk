@@ -37,6 +37,10 @@ const key = (n: string) => loadAccount(`${root}.secrets/keystores/${n}`, pw);
 const deployer = key("deployer");
 const attester = key("attester").address;
 const renderAgent = key("render-agent").address;
+// Render agents allowed to anchor receipts on a redeploy: this machine's, or the list in RENDER_AGENTS
+// (e.g. the public server's own render agent).
+const renderAgents = (process.env.RENDER_AGENTS ?? renderAgent).split(",").map((a) => a.trim()) as Address[];
+if (renderAgents.some((a) => !/^0x[0-9a-fA-F]{40}$/.test(a))) throw new Error("RENDER_AGENTS must be 0x addresses, comma-separated");
 
 const chain = chainOf({ chainId: net.chainId, rpcUrl: net.rpcUrl, explorer: net.explorer } as Deployment);
 const pub = createPublicClient({ chain, transport: http(net.rpcUrl) });
@@ -58,6 +62,7 @@ async function redeployForHsp(): Promise<never> {
   const prev = JSON.parse(readFileSync(`${deploymentsDir(root)}/${network}.json`, "utf8"));
   console.log(`HSP token ${opt.token.symbol} ${opt.token.address} (${opt.token.decimals} decimals, ${opt.token.protocol}) on ${opt.network}; Permit2 ${permit2}`);
   console.log(`keeping CreatorRegistry ${prev.creators} and the Safe ${prev.safe ?? "(none yet)"}; new: LicenseRegistry, ReceiptAnchor, HspSettlement`);
+  console.log(`token EIP-712 domain "${opt.token.name}" version ${opt.token.version}; render agents ${renderAgents.join(", ")}`);
   const gasPrice = await pub.getGasPrice();
   if (!broadcast) {
     let gas = 0n;
@@ -97,7 +102,9 @@ async function redeployForHsp(): Promise<never> {
   const settlement = await deploy("HspSettlement", [owner, rail, opt.token.address, permit2, licences.address, receipts.address]);
   await call("setSettlement(L)", licences.address, "LicenseRegistry", "setSettlement", [settlement.address]);
   await call("setSettlement(R)", receipts.address, "ReceiptAnchor", "setSettlement", [settlement.address]);
-  await call("setRenderAgent", settlement.address, "HspSettlement", "setRenderAgent", [renderAgent, true]);
+  for (const [i, a] of renderAgents.entries()) await call(`setRenderAgent${renderAgents.length > 1 ? `(${i + 1})` : ""}`, settlement.address, "HspSettlement", "setRenderAgent", [a, true]);
+  // The contracts this replaces, so Verify can still answer for files anchored there.
+  const previous = { licences: prev.licences, receipts: prev.receipts, settlement: prev.settlement, token: prev.token, tokenSymbol: prev.tokenSymbol, rail: prev.rail, startBlock: prev.startBlock };
   const out = {
     ...prev,
     hspNetwork: opt.network,
@@ -116,6 +123,7 @@ async function redeployForHsp(): Promise<never> {
     receipts: receipts.address,
     settlement: settlement.address,
     txs: { ...txs, previous: prev.txs },
+    previousDeployments: [previous, ...(prev.previousDeployments ?? [])],
   };
   writeFileSync(`${deploymentsDir(root)}/${network}.json`, `${JSON.stringify(out, null, 2)}\n`);
   console.log(`wrote ${deploymentsDir(root)}/${network}.json; next: pnpm run safe -- --network ${network} (dry run, then --broadcast) and pnpm run verify -- --network ${network}`);

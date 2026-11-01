@@ -10,6 +10,36 @@ import { photoType, stripJpegMetadata, youtubeChannel } from "../src/app/onboard
 import { startRuntime, type Runtime } from "../src/app/runtime.js";
 import { BRAND_CAPS, handle } from "../src/app/server.js";
 
+describe("app records across a redeploy", () => {
+  it("archives licences, bundles and renders when the LicenseRegistry changes; keeps accounts and creators", async () => {
+    const { Accounts } = await import("../src/app/accounts.js");
+    const dir = mkdtempSync(join(tmpdir(), "likeness-archive-"));
+    try {
+      const a = new Accounts(`${dir}/accounts.sqlite`);
+      expect(a.ensureDeployment("0x00000000000000000000000000000000000000a1")).toBe(0);
+      a.upsert({ uid: "u1", email: "u1@example.com", name: "U1", picture: null });
+      a.createCreator("u1", "0x00000000000000000000000000000000000000c1", "U1", null);
+      a.recordLicence("1", "u1", "0x00000000000000000000000000000000000000c1");
+      a.setLicenceMeta("1", "image", "shoes");
+      a.createBundle({ id: "B1", uid: "u1", creator: "0x00000000000000000000000000000000000000c1", brief: "shoes", images: 1, videos: 0, duration: 86400 });
+      const hash = `0x${"ab".repeat(32)}`;
+      a.saveRender({ assetHash: hash, licenceId: "1", renderIndex: 0, kind: "image", mime: "image/jpeg", size: 1, prompt: "p", promptSha256: "0x1", model: "m", note: null, uid: "u1", creator: "0x00000000000000000000000000000000000000c1", bundleId: "B1", hspTx: null, anchorTx: null, createdAt: 1 });
+      expect(a.ensureDeployment("0x00000000000000000000000000000000000000A1")).toBe(0); // same registry, any case
+      expect(a.ensureDeployment("0x00000000000000000000000000000000000000b2")).toBe(4);
+      expect(a.licenceOwner("1")).toBeUndefined();
+      expect(a.bundles()).toEqual([]);
+      expect(a.renders()).toEqual([]);
+      expect(a.render(hash)?.prompt).toBe("p"); // still readable for Verify
+      expect(a.account("u1")?.email).toBe("u1@example.com");
+      expect(a.creator("u1")?.address).toBe("0x00000000000000000000000000000000000000c1");
+      expect(a.ensureDeployment("0x00000000000000000000000000000000000000b2")).toBe(0);
+      a.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("Firebase ID tokens", () => {
   it("accepts a Google sign-in for this project only", async () => {
     const { publicKey, privateKey } = await generateKeyPair("RS256");
