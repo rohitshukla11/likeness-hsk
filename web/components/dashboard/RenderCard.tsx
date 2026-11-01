@@ -81,7 +81,7 @@ export function RenderCard({ r, mode }: { r: RenderView; mode: "brand" | "creato
           {revoked && <span className="rounded-full bg-bad-bg px-2.5 py-0.5 text-[12px] font-semibold text-bad">Licensed when made, since revoked</span>}
         </span>
         <span className="text-grey">
-          {new Date(r.createdAt).toLocaleString()} · {mode === "brand" ? `Creator: ${r.creatorName ?? "Ana Reyes"}` : `Brand: ${r.brand ?? "the demo brand agent"}`} · licence #{r.licenceId}, render {r.renderIndex}
+          {new Date(r.createdAt).toLocaleString()} · {mode === "brand" ? `Creator: ${r.creatorName ?? `${r.creator.slice(0, 6)}…${r.creator.slice(-4)}`}` : `Brand: ${r.brand ?? "the demo brand agent"}`} · licence #{r.licenceId}, render {r.renderIndex}
           {r.size ? ` · ${fmtBytes(r.size)}` : ""}
         </span>
         {r.note && <span className="text-[13px] text-wait">{r.note}</span>}

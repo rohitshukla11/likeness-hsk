@@ -26,7 +26,7 @@ export default function DashboardPage() {
       return (
         <>
           <BrandConsole />
-          <CreatorDashboard />
+          {state.demoCreator !== false && <CreatorDashboard />}
         </>
       );
     return (
