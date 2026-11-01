@@ -32,7 +32,8 @@ export interface PayInput {
   flowId: string;
   paymentRequestId: string;
   /** What the order must pay: the creator's on-chain payout, from this payer, in this token. */
-  expect: { payTo: Address; token: { address: Address; decimals: number; symbol: string; protocol: "eip3009" | "permit2" } };
+  /** The token as get_chain_config gave it: its EIP-712 name and version, and for Permit2 the only allowed spender. */
+  expect: { payTo: Address; token: { address: Address; decimals: number; symbol: string; protocol: "eip3009" | "permit2"; name?: string; version?: string; permit2Spender?: Address } };
   balanceOf: (token: Address, owner: Address) => Promise<bigint>;
   /** The most the brand will authorize, raw units (its budget for this render). */
   maxRaw: bigint;
@@ -118,7 +119,7 @@ export async function payWithHsp(i: PayInput): Promise<Submitted> {
 }
 
 /** The quote must be for this order, this payer, this recipient and this token, in the expected scheme. */
-function checkQuote(q: PreparedPayment, i: PayInput) {
+export function checkQuote(q: PreparedPayment, i: PayInput) {
   if (!same(q.pay_to, i.expect.payTo)) throw new Error(`the quote pays ${q.pay_to}, not the creator's payout ${i.expect.payTo}: nothing signed`);
   if (!same(q.payer, i.signer.address)) throw new Error(`the quote is for payer ${q.payer}, not ${i.signer.address}: nothing signed`);
   if (q.eip712?.primaryType !== PRIMARY[i.expect.token.protocol]) throw new Error(`the quote asks for ${q.eip712?.primaryType}, not ${PRIMARY[i.expect.token.protocol]}: nothing signed`);
@@ -128,9 +129,14 @@ function checkQuote(q: PreparedPayment, i: PayInput) {
   if (i.expect.token.protocol === "eip3009") {
     if (!same(m.to, i.expect.payTo) || String(m.value) !== q.token_total_raw || !same(m.from, i.signer.address)) throw new Error("the eip712 message doesn't match the quote: nothing signed");
     if (!same(q.eip712.domain.verifyingContract, i.expect.token.address)) throw new Error("the eip712 domain isn't the token's: nothing signed");
+    const d = q.eip712.domain as { name?: unknown; version?: unknown };
+    if ((i.expect.token.name !== undefined && d.name !== i.expect.token.name) || (i.expect.token.version !== undefined && String(d.version) !== i.expect.token.version)) {
+      throw new Error(`the eip712 domain is "${String(d.name)}" version ${String(d.version)}, not the token's "${i.expect.token.name}" version ${i.expect.token.version}: nothing signed`);
+    }
   } else {
     const permitted = m.permitted as { token?: unknown; amount?: unknown } | undefined;
     if (!same(permitted?.token, i.expect.token.address) || String(permitted?.amount) !== q.token_total_raw) throw new Error("the eip712 permit doesn't match the quote: nothing signed");
+    if (i.expect.token.permit2Spender && !same(m.spender, i.expect.token.permit2Spender)) throw new Error(`the permit names spender ${String(m.spender)}, not the token's permit2_spender ${i.expect.token.permit2Spender}: nothing signed`);
   }
 }
 

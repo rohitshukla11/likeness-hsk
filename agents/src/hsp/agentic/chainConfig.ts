@@ -8,36 +8,67 @@ import type { Address } from "viem";
 export interface PaymentOption {
   network: string;
   chainId: number;
-  token: { address: Address; decimals: number; symbol: string; protocol: "eip3009" | "permit2" };
+  /**
+   * name / version: the token's EIP-712 domain (EIP-3009 authorizations are signed against it), as the
+   * live answer gives them; permit2Spender: the only spender a Permit2 authorization may name.
+   */
+  token: { address: Address; decimals: number; symbol: string; protocol: "eip3009" | "permit2"; name?: string; version?: string; permit2Spender?: Address };
 }
 
 type Rec = Record<string, unknown>;
 const isRec = (v: unknown): v is Rec => !!v && typeof v === "object" && !Array.isArray(v);
 
-/** Every network/token pair in the answer, read only from the field names the guide gives. */
-export function paymentOptions(cfg: unknown): PaymentOption[] {
-  const networks: Rec[] = [];
-  const visit = (v: unknown) => {
-    if (Array.isArray(v)) v.forEach(visit);
-    else if (isRec(v)) {
-      if (Array.isArray(v.tokens) && (v.chain_id !== undefined || v.chainId !== undefined)) networks.push(v);
-      else Object.values(v).forEach(visit);
-    }
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+function tokenOf(t: Rec): PaymentOption["token"] | undefined {
+  const protocol = String(t.payment_protocol ?? "");
+  if (protocol !== "eip3009" && protocol !== "permit2") return undefined;
+  if (typeof t.address !== "string" || !ADDRESS.test(t.address) || t.decimals === undefined) return undefined;
+  return {
+    address: t.address as Address,
+    decimals: Number(t.decimals),
+    symbol: String(t.symbol ?? t.coin ?? t.name ?? "token"),
+    protocol,
+    ...(typeof t.name === "string" ? { name: t.name } : {}),
+    ...(t.version !== undefined ? { version: String(t.version) } : {}),
+    ...(typeof t.permit2_spender === "string" && ADDRESS.test(t.permit2_spender) ? { permit2Spender: t.permit2_spender as Address } : {}),
   };
-  visit(cfg);
-  if (!networks.length) throw new Error(`get_chain_config: no network with tokens found (top-level keys: ${isRec(cfg) ? Object.keys(cfg).join(", ") : typeof cfg}); read the live answer before choosing`);
+}
+
+/**
+ * Every network/token pair in the answer, read only from the field names the guide gives. The live
+ * answer lists networks[] and tokens[] separately, joined by chain_id; an answer with tokens nested in
+ * each network is read too. Duplicates (the same token on the same chain) are listed once.
+ */
+export function paymentOptions(cfg: unknown): PaymentOption[] {
   const out: PaymentOption[] = [];
-  for (const n of networks) {
-    const network = String(n.network ?? n.name ?? "");
-    const chainId = Number(n.chain_id ?? n.chainId);
-    for (const t of n.tokens as Rec[]) {
-      const protocol = String(t.payment_protocol ?? "");
-      if (protocol !== "eip3009" && protocol !== "permit2") continue;
-      if (typeof t.address !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(t.address) || t.decimals === undefined) continue;
-      out.push({ network, chainId, token: { address: t.address as Address, decimals: Number(t.decimals), symbol: String(t.symbol ?? t.coin ?? t.name ?? "token"), protocol } });
+  const seen = new Set<string>();
+  const add = (network: string, chainId: number, t: Rec) => {
+    const token = tokenOf(t);
+    const key = `${chainId}:${String(t.address).toLowerCase()}`;
+    if (!token || seen.has(key)) return;
+    seen.add(key);
+    out.push({ network, chainId, token });
+  };
+  if (isRec(cfg) && Array.isArray(cfg.networks) && Array.isArray(cfg.tokens)) {
+    const nets = (cfg.networks as unknown[]).filter(isRec);
+    for (const t of (cfg.tokens as unknown[]).filter(isRec)) {
+      const chainId = Number(t.chain_id ?? t.chainId);
+      const n = nets.find((x) => Number(x.chain_id ?? x.chainId) === chainId);
+      if (n) add(String(n.name ?? n.network ?? ""), chainId, t);
     }
+  } else {
+    const visit = (v: unknown) => {
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (isRec(v)) {
+        if (Array.isArray(v.tokens) && (v.chain_id !== undefined || v.chainId !== undefined)) {
+          for (const t of (v.tokens as unknown[]).filter(isRec)) add(String(v.network ?? v.name ?? ""), Number(v.chain_id ?? v.chainId), t);
+        } else Object.values(v).forEach(visit);
+      }
+    };
+    visit(cfg);
   }
-  if (!out.length) throw new Error("get_chain_config: no token with an address, decimals and payment_protocol eip3009/permit2");
+  if (!out.length) throw new Error(`get_chain_config: no token with an address, decimals and payment_protocol eip3009/permit2 (top-level keys: ${isRec(cfg) ? Object.keys(cfg).join(", ") : typeof cfg}); read the live answer before choosing`);
   return out;
 }
 

@@ -16,7 +16,7 @@ import { diffReport, diffSchemas } from "../src/hsp/agentic/schemaDiff.js";
 import { terminalApprover } from "../src/hsp/agentic/terminal.js";
 import { PassThrough } from "node:stream";
 import { z } from "zod";
-import { type Approval, type Approver, typedData, watchPayment } from "../src/hsp/agentic/payer.js";
+import { type Approval, type Approver, checkQuote, typedData, watchPayment } from "../src/hsp/agentic/payer.js";
 
 const LICENCE = { category: ADVERTISING, regions: 1, durationSeconds: 7n * 86400n, renderCap: 3, purpose: "spring campaign" };
 
@@ -184,7 +184,51 @@ describe("HSP Agentic Payment client and helpers", () => {
     expect(paymentOptions(two)).toHaveLength(2);
     expect(() => chooseOption(two)).toThrow(/several options; choose one/);
     expect(chooseOption(two, { token: "0x00000000000000000000000000000000000000d2" }).token.protocol).toBe("permit2");
-    expect(() => chooseOption({ something: 1 })).toThrow(/no network with tokens found \(top-level keys: something\)/);
+    expect(() => chooseOption({ something: 1 })).toThrow(/no token with an address, decimals and payment_protocol eip3009\/permit2 \(top-level keys: something\)/);
+  });
+
+  it("reads the live answer: networks[] and tokens[] joined by chain_id, with the token's EIP-712 name, version and Permit2 spender", () => {
+    const spender = "0x85Afd346143690AFbEc392524A8bae1e9ea8f500";
+    const usdc = { address: "0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6", chain_id: 133, decimals: 6, name: "USD Coin", symbol: "USDC", payment_protocol: "eip3009", permit2_spender: spender, version: "2" };
+    const live = {
+      networks: [
+        { chain_id: 84532, name: "base-sepolia" },
+        { chain_id: 133, name: "hashkey-testnet" },
+        { chain_id: 84532, name: "base-sepolia" },
+      ],
+      tokens: [
+        usdc,
+        { address: "0x372325443233fEbaC1F6998aC750276468c83CC6", chain_id: 133, decimals: 6, name: "Tether USD", symbol: "USDT", payment_protocol: "permit2", permit2_spender: spender, version: "1" },
+        { address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", chain_id: 84532, decimals: 6, name: "USDC", symbol: "USDC", payment_protocol: "eip3009", version: "2" },
+        { address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", chain_id: 84532, decimals: 6, name: "USDC", symbol: "USDC", payment_protocol: "eip3009", version: "2" },
+        { address: "0x00000000000000000000000000000000000000e1", chain_id: 1, decimals: 6, symbol: "X", payment_protocol: "eip3009" },
+      ],
+    };
+    expect(paymentOptions(live)).toHaveLength(3);
+    expect(chooseOption(live, { chainId: 133, token: usdc.address })).toEqual({
+      network: "hashkey-testnet",
+      chainId: 133,
+      token: { address: usdc.address, decimals: 6, symbol: "USDC", protocol: "eip3009", name: "USD Coin", version: "2", permit2Spender: spender },
+    });
+    expect(() => chooseOption(live, { chainId: 133 })).toThrow(/several options/);
+  });
+
+  it("signs nothing unless the eip712 domain is the token's (name and version) and a Permit2 spender is HSP's", () => {
+    const signer = privateKeyToAccount(generatePrivateKey());
+    const payTo = "0x00000000000000000000000000000000000000a1";
+    const token = { address: "0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6" as const, decimals: 6, symbol: "USDC", protocol: "eip3009" as const, name: "USD Coin", version: "2" };
+    const quote = (domain: Record<string, unknown>) =>
+      ({ pay_to: payTo, payer: signer.address, token_total_raw: "50000", eip712: { primaryType: "TransferWithAuthorization", domain: { chainId: 133, verifyingContract: token.address, ...domain }, message: { from: signer.address, to: payTo, value: "50000" } } }) as never;
+    const input = (t: object) => ({ signer, expect: { payTo, token: t } }) as never;
+    expect(() => checkQuote(quote({ name: "USD Coin", version: "2" }), input(token))).not.toThrow();
+    expect(() => checkQuote(quote({ name: "USDC", version: "2" }), input(token))).toThrow(/domain is "USDC" version 2, not the token's "USD Coin" version 2: nothing signed/);
+    expect(() => checkQuote(quote({ name: "USD Coin", version: "1" }), input(token))).toThrow(/nothing signed/);
+
+    const usdt = { address: "0x372325443233fEbaC1F6998aC750276468c83CC6" as const, decimals: 6, symbol: "USDT", protocol: "permit2" as const, permit2Spender: "0x85Afd346143690AFbEc392524A8bae1e9ea8f500" as const };
+    const permit = (spender: string) =>
+      ({ pay_to: payTo, payer: signer.address, token_total_raw: "50000", eip712: { primaryType: "PermitTransferFrom", domain: { name: "Permit2", chainId: 133 }, message: { permitted: { token: usdt.address, amount: "50000" }, spender } } }) as never;
+    expect(() => checkQuote(permit(usdt.permit2Spender), input(usdt))).not.toThrow();
+    expect(() => checkQuote(permit(payTo), input(usdt))).toThrow(/not the token's permit2_spender .*: nothing signed/);
   });
 
   it("reports payment-safe as not finalized, in the guide's words", async () => {

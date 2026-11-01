@@ -106,8 +106,24 @@ export class HspAgenticEmulator {
     const s = this.server;
     const flow = { flow_id: z.string() };
 
+    // The live answer's shape (QA, 1 Nov): networks[] and tokens[] side by side, joined by chain_id.
     s.registerTool("get_chain_config", { description: "Supported networks and tokens (emulator: the local devnet)", inputSchema: {} }, async () =>
-      text({ networks: [{ network: o.network, chain_id: o.chain.id, tokens: [{ symbol: o.token.symbol, address: o.token.address, decimals: o.token.decimals, payment_protocol: o.token.protocol }] }] }),
+      text({
+        networks: [{ chain_id: o.chain.id, name: o.network, display_name: o.chain.name, is_testnet: true }],
+        tokens: [
+          {
+            address: o.token.address,
+            chain_id: o.chain.id,
+            decimals: o.token.decimals,
+            name: o.token.name ?? o.token.symbol,
+            symbol: o.token.symbol,
+            payment_protocol: o.token.protocol,
+            permit2_spender: o.executor.address,
+            version: o.token.version ?? (o.token.protocol === "eip3009" ? "2" : "1"),
+            is_stablecoin: true,
+          },
+        ],
+      }),
     );
 
     s.registerTool(
@@ -140,7 +156,16 @@ export class HspAgenticEmulator {
       return text({ flow_id: order.flowId, payment_request_id: order.paymentRequestId, merchant_name: order.merchantName, pay_to: order.payTo, status: order.status, gas_fee_advanced: true, cart_mandate: order.cart });
     });
 
-    s.registerTool("estimate_fee", { description: "Network fee estimate (the emulated platform advances it)", inputSchema: flow }, async () => text({ gas_fee: "0", gas_fee_advanced: true }));
+    // The live inputs (QA, 1 Nov): the order's payment_request_id, the x402 v2 payment payload (base64 JSON,
+    // signature may be empty when quoting) and the merchant name. Not used by the payment flow.
+    s.registerTool(
+      "estimate_fee",
+      { description: "Network fee estimate (the emulated platform advances it)", inputSchema: { payment_request_id: z.string(), payment_payload: z.string(), merchant_name: z.string() } },
+      async (a) => {
+        const known = [...this.orders.values()].some((x) => x.paymentRequestId === a.payment_request_id && x.merchantName === a.merchant_name);
+        return known ? text({ gas_fee: "0", gas_fee_advanced: true }) : fail(10003, "unknown payment_request_id for this merchant");
+      },
+    );
 
     s.registerTool(
       "prepare_payment",

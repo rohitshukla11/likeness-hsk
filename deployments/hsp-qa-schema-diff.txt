@@ -1,0 +1,11 @@
+get_chain_config: same
+create_order: same
+  note: optional live property "redirect_url" not used
+get_order: same
+estimate_fee: same
+prepare_payment: same
+finalize_payment: same
+submit_payment: same
+query_payment: same
+
+No stops: the flow can call every tool as the live schemas describe.

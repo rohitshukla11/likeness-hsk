@@ -236,7 +236,8 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     settlement: dep.settlement,
     token: dep.token,
     tokenSymbol: dep.tokenSymbol,
-    tokenDomain: { name: "", version: "", chainId: dep.chainId, verifyingContract: dep.token },
+    // The token's EIP-712 domain (EIP-3009 authorizations), as get_chain_config gave it at deploy time.
+    tokenDomain: { name: dep.tokenName ?? "", version: dep.tokenVersion ?? "", chainId: dep.chainId, verifyingContract: dep.token },
     rail: dep.rail,
     permit2: dep.permit2,
   };
@@ -273,7 +274,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
         publicClient: pub,
         executor: key(process.env.LIKENESS_EXECUTOR_KEY ?? "deployer"),
         network: d.hspNetwork,
-        token: { address: d.token, decimals: 6, symbol: d.tokenSymbol, protocol: d.rail },
+        token: { address: d.token, decimals: 6, symbol: d.tokenSymbol, protocol: d.rail, ...(dep.tokenName ? { name: dep.tokenName, version: dep.tokenVersion } : {}) },
         permit2: d.permit2,
       });
       const c = await em.client();
