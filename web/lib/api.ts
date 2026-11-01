@@ -16,6 +16,8 @@ export type State = {
   policy: { maxPricePerRender: string; dailyBudget: string };
   cap: { max: number; paidToday: number } | null;
   signIn?: { google: boolean };
+  /** Whether Ana Reyes, the synthetic demo creator, is listed on this server. */
+  demoCreator?: boolean;
   /** AI ads (Vertex AI) or TEST RENDER, with the per-day caps. */
   ads?: { ai: boolean; videoMultiplier: number; brandCaps: Caps; siteCaps: Caps; usedToday: Caps };
   chainId: number;

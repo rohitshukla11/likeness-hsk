@@ -84,9 +84,16 @@ async function briefRefusal(rt: Runtime, brief: string): Promise<string | null> 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const CATEGORY_BITS = [1 << 8, 1 << 9, 1 << 10, 1 << 11, 1 << 12];
 
+/**
+ * Ana Reyes, the synthetic demo creator, is listed unless LIKENESS_DEMO_CREATOR=0 (the public server lists
+ * real creators only). Her licences and receipts stay on chain and Verify still answers for her files.
+ */
+const showDemoCreator = () => process.env.LIKENESS_DEMO_CREATOR !== "0";
+
 /** A creator as the web UI shows it: on-chain terms, plus the profile kept on this server. */
 async function creatorView(rt: Runtime, address: Address) {
   const ana = address.toLowerCase() === rt.creator.toLowerCase();
+  if (ana && !showDemoCreator()) return undefined;
   const row = ana ? undefined : rt.accounts.creatorByAddress(address);
   if (!ana && !row?.registeredTx) return undefined;
   const [t, payout] = await Promise.all([rt.chain.terms(address), rt.chain.payoutOf(address)]);
@@ -274,6 +281,7 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
       cap: guard ? { max: guard.cap.max, paidToday: guard.cap.count() } : null,
       // Google sign-in for brands and creators; the demo password is the admin fallback.
       signIn: { google: true },
+      demoCreator: showDemoCreator(),
       // AI ads (Vertex AI) or TEST RENDER; caps per brand account and across the server, per UTC day.
       ads: {
         ai: !!rt.ai,
@@ -298,7 +306,7 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
   }
   if (req.method === "GET" && path === "/api/log") return json(res, 200, rt.log.since(Number(url.searchParams.get("since") ?? 0)));
   if (req.method === "GET" && path === "/api/creators") {
-    const all = [rt.creator, ...rt.accounts.registeredCreators().map((c) => c.address as Address)];
+    const all = [...(showDemoCreator() ? [rt.creator] : []), ...rt.accounts.registeredCreators().map((c) => c.address as Address)];
     return json(res, 200, (await Promise.all(all.map((a) => creatorView(rt, a)))).filter(Boolean));
   }
   const cr = /^\/api\/creators\/(0x[0-9a-fA-F]{40})(\/photo)?$/.exec(path);
@@ -394,7 +402,8 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
     }
     const q = url.searchParams.get("creator");
     const own = me?.role === "creator" ? rt.accounts.creator(me.uid)?.address : undefined;
-    return json(res, 200, await listBundles(rt, { creator: (q && ADDRESS.test(q) ? q : (own ?? rt.creator)) as Address }));
+    const creator = q && ADDRESS.test(q) ? q : (own ?? (showDemoCreator() || isOperator ? rt.creator : undefined));
+    return json(res, 200, creator ? await listBundles(rt, { creator: creator as Address }) : []);
   }
   if (req.method === "GET" && path === "/api/trace") {
     // The log events of one paid render: from the brand's A2A request for it to its receipt.

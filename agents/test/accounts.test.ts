@@ -174,4 +174,20 @@ describe("Google accounts on the app server (local devnet, public guard)", () =>
     for (let i = 0; i < BRAND_CAPS.image; i++) rt.accounts.addAiUse("u-other", "image");
     expect((await call("other", "/api/brand/pay", { licenceId })).body.error).toMatch(/your account has made today's 3 image ads/);
   }, 60_000);
+
+  it("with LIKENESS_DEMO_CREATOR=0 the synthetic creator isn't listed (real creators are)", async () => {
+    process.env.LIKENESS_DEMO_CREATOR = "0";
+    try {
+      const list = (await call(null, "/api/creators")).body;
+      expect(list.every((c: { synthetic: boolean }) => !c.synthetic)).toBe(true);
+      expect(list.length).toBeGreaterThanOrEqual(1);
+      expect((await call(null, `/api/creators/${rt.creator}`)).status).toBe(404);
+      expect((await call(null, "/api/state")).body.demoCreator).toBe(false);
+      expect((await call(null, "/api/bundles?who=creator")).body).toEqual([]);
+    } finally {
+      delete process.env.LIKENESS_DEMO_CREATOR;
+    }
+    expect((await call(null, "/api/state")).body.demoCreator).toBe(true);
+  });
 });
+

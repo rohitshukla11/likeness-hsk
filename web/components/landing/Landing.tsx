@@ -346,7 +346,7 @@ function Creators() {
           return (
             <Link
               key={ex.photo}
-              href="/creators/ana-reyes"
+              href="/creators"
               className={`card-in${seen ? " in" : ""} relative block self-start rounded-[28px] p-3 text-ink no-underline shadow-[0_18px_40px_rgba(18,19,22,0.12)] ${PLACE[i]}`}
               style={{ transform, transitionDelay: `${0.1 + i * 0.18}s`, backgroundImage: `url(${ex.frame})`, backgroundSize: "cover" }}
             >
@@ -359,7 +359,7 @@ function Creators() {
                   <span className="font-display text-[14px] font-bold">YOUR FACE HERE</span>
                   <span className="text-[12px] text-grey">Your terms, paid per render</span>
                 </span>
-                <span className={pillClass("ink", "min-h-9 px-3 text-[12px]")}>See the demo creator</span>
+                <span className={pillClass("ink", "min-h-9 px-3 text-[12px]")}>See the creators</span>
               </div>
             </Link>
           );
@@ -430,7 +430,7 @@ function Quotes() {
                   </span>
                 ))}
               </span>
-              <Link href="/creators/ana-reyes" className={pillClass("outline-dark", "px-6 text-[14px]")}>
+              <Link href="/creators" className={pillClass("outline-dark", "px-6 text-[14px]")}>
                 License a face
               </Link>
               <Link href="/verify" className={pillClass("ink", "px-6 text-[14px]")}>
