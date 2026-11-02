@@ -118,9 +118,13 @@ export class HspAgentic {
   /** Where a live name differed from the guide's and was mapped ("prepare_payment.payer → payerAddress"). */
   readonly adaptations = new Set<string>();
 
-  /** HashKey's QA server. Refuses until the allowlisting is confirmed (HSP_ALLOWLISTED=1). */
-  static async connectQa(url = HSP_MCP_URL): Promise<HspAgentic> {
-    if (process.env.HSP_ALLOWLISTED !== "1") throw new Error("HSP QA: our egress IP isn't confirmed as allowlisted yet (set HSP_ALLOWLISTED=1 once HashKey confirms); not connecting");
+  /**
+   * HashKey's QA server. Refuses until the allowlisting is confirmed (HSP_ALLOWLISTED=1), or, for the admin's
+   * live QA payment only (app/liveQa.ts), until HSP_QA_LIVE_RUN=1: that run doesn't switch the main flow to QA.
+   */
+  static async connectQa(url = HSP_MCP_URL, o: { liveRun?: boolean } = {}): Promise<HspAgentic> {
+    const confirmed = process.env.HSP_ALLOWLISTED === "1" || (o.liveRun === true && process.env.HSP_QA_LIVE_RUN === "1");
+    if (!confirmed) throw new Error("HSP QA: our egress IP isn't confirmed as allowlisted yet (set HSP_ALLOWLISTED=1 once HashKey confirms); not connecting");
     return HspAgentic.connect(new StreamableHTTPClientTransport(new URL(url)), "hashkey-qa");
   }
 

@@ -9,12 +9,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseUnits, type Address, type Hex } from "viem";
+import { createPublicClient, http, parseAbi, parseUnits, type Address, type Hex } from "viem";
 import { a2aResponse, readBody, sendJson } from "../a2a/server.js";
 import { Refused } from "../brand-agent/agent.js";
 import { usdValue } from "../hsp/cart.js";
 import { claimMessage, ClaimError, verifyClaim } from "./claim.js";
-import { MERCHANT_NAME } from "../hsp/agentic/client.js";
+import { HSP_MCP_URL, HspAgentic, MERCHANT_NAME } from "../hsp/agentic/client.js";
+import { rehearsalQa } from "../hsp/agentic/qaRehearsal.js";
+import { LIVE_QA_LABEL, LiveQa } from "./liveQa.js";
 import { hspStatuses, PaymentJobs } from "./jobs.js";
 import { ADVERTISING, CREATOR_MAX_PRICE, listLicences, listPayments, startRuntime, VIDEO_MULTIPLIER, type Mode, type Runtime } from "./runtime.js";
 import { clientIp, guardFromEnv, type Guard } from "./guard.js";
@@ -34,6 +36,29 @@ const port = Number(process.env.PORT ?? 8788);
 const operator = (process.env.LIKENESS_OPERATOR ?? (mode === "mainnet" ? "0" : "1")) === "1";
 const publicUrl = process.env.PUBLIC_URL ?? `http://127.0.0.1:${port}`;
 const publicGuard = guardFromEnv(`${deploymentsDir(root)}/${mode}-paid-today.json`);
+
+/**
+ * The admin's live HashKey QA payment (app/liveQa.ts): HSP_QA_LIVE_RUN=1 runs it on HashKey's QA server,
+ * "rehearsal" on the offline stand-in; unset, it's off. Never on mainnet. The main flow is unchanged.
+ */
+let liveQa: LiveQa | undefined;
+function liveQaFor(rt: Runtime): LiveQa | undefined {
+  const flag = process.env.HSP_QA_LIVE_RUN;
+  if ((flag !== "1" && flag !== "rehearsal") || rt.mode === "mainnet") return undefined;
+  const sepolia = createPublicClient({ transport: http(process.env.SEPOLIA_RPC_URL ?? "https://ethereum-sepolia-rpc.publicnode.com") });
+  const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
+  return (liveQa ??= new LiveQa({
+    connect: flag === "1" ? () => HspAgentic.connectQa(HSP_MCP_URL, { liveRun: true }) : () => rehearsalQa(),
+    source: flag === "1" ? "hashkey-qa" : "rehearsal",
+    signer: rt.brandAccount(),
+    payTo: () => rt.chain.payoutOf(rt.creator),
+    balanceOf: flag === "1" ? (token, who) => sepolia.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [who] }) : async () => 10n ** 12n,
+    amountRaw: BigInt(process.env.LIVE_QA_AMOUNT_RAW ?? "50000"),
+    // A rehearsal's transaction id is made up: never linked to an explorer.
+    ...(flag === "1" ? { explorerTx: (tx: string) => `https://sepolia.etherscan.io/tx/${tx}` } : {}),
+    saveTo: `${deploymentsDir(root)}/hsp-qa-live-payment.json`,
+  }));
+}
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
 const PAGES: Record<string, string> = { "/": "index.html", "/brand": "brand.html", "/creator": "creator.html", "/verify": "verify.html", "/agent": "agent.html" };
@@ -252,6 +277,28 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
     if (!cookie) return json(res, 401, { error: "wrong demo password" });
     res.setHeader("set-cookie", cookie);
     return json(res, 200, { ok: true });
+  }
+
+  // ---------------------------------------------------------------- the admin's live HashKey QA payment
+  if (path === "/api/admin/live-qa" || path === "/api/admin/live-qa/answer") {
+    if (!isOperator) return json(res, 401, { error: "admin only: sign in with the demo password at /admin" });
+    const q = liveQaFor(rt);
+    if (req.method === "GET" && path === "/api/admin/live-qa") {
+      const source = !q ? null : process.env.HSP_QA_LIVE_RUN === "1" ? "hashkey-qa" : "rehearsal";
+      return json(res, 200, { enabled: !!q, source, label: source === "rehearsal" ? `REHEARSAL (offline, no HashKey server, no money moves): ${LIVE_QA_LABEL}` : LIVE_QA_LABEL, run: q?.current() ?? null });
+    }
+    if (!q) return json(res, 404, { error: "the live QA payment isn't enabled on this server (HSP_QA_LIVE_RUN)" });
+    if (req.method === "POST" && path === "/api/admin/live-qa") {
+      try {
+        return json(res, 200, { run: await q.start() });
+      } catch (e) {
+        return json(res, 409, { error: (e as Error).message });
+      }
+    }
+    if (req.method === "POST" && path === "/api/admin/live-qa/answer") {
+      const body = parse(raw);
+      return q.answer(String(body.id ?? ""), body.yes === true) ? json(res, 200, { ok: true }) : json(res, 409, { error: "this question is no longer pending" });
+    }
   }
 
   // ---------------------------------------------------------------- pages and assets

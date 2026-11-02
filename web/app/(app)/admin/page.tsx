@@ -1,6 +1,7 @@
 "use client";
 
 /** The admin fallback: the demo password opens an operator session (acts for the shared brand agent and Ana Reyes). */
+import { LiveQaPayment } from "@/components/admin/LiveQaPayment";
 import { AppPage, Card } from "@/components/ds";
 import { useAppState } from "@/components/site/AppState";
 import { OperatorGate } from "@/components/site/OperatorGate";
@@ -16,6 +17,7 @@ export default function AdminPage() {
         </p>
         <OperatorGate state={state} onChange={() => void refresh()} />
       </Card>
+      {state?.operator && <LiveQaPayment />}
     </AppPage>
   );
 }
