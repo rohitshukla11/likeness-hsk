@@ -264,3 +264,28 @@ not used.
 - The public server answers on https://hsk.likeness.site (Let's Encrypt through Caddy; the sslip.io address
   stays as a fallback), which is also the agents' public URL in their A2A cards.
 
+## 2 November: the main flow on Ethereum Sepolia, live through HashKey QA
+
+The organisers allow it during the hackathon: "participants are welcome to deploy and test their smart contracts on
+Ethereum Sepolia during the hackathon; winning teams migrate to HSKChain Mainnet after" (2 November), with Circle's
+USDC on Sepolia as the official test USDC. HashKey QA's test USDC for HSK testnet never reached us, so the main
+flow moved to Sepolia, live through QA. Nothing on HSK testnet was removed.
+
+**New** (commits 51d78ab, f19b957, eba9e3d):
+- The four contracts, unchanged, deployed on Sepolia on the EIP-3009 rail for Circle's USDC (`agents/scripts/deploy.ts`,
+  `deployments/sepolia.json`), owned by a Safe, verified on Sourcify (exact match) and Blockscout; the attester is the
+  public server's; the server's own creator registered (`pnpm run vm -- sepolia-creator`).
+- `LIKENESS_DEPLOYMENT` picks the deployment file; HSK testnet is the previous deployment, read on its own chain by
+  Verify. The app's records for one deployment are archived on a switch and restored on a switch back, so the rollback
+  to HSK testnet with the emulator is one step (`/usr/local/sbin/likeness-rollback-hsk` on the server).
+- The web UI names the chain from the backend ("Ethereum Sepolia (testnet)"), links to its explorer (Etherscan;
+  HSK's for older files on Verify), labels the payment status "HSP: HashKey QA (Sepolia)", and How it works says why
+  the contracts are on Sepolia.
+- Two fixes for Sepolia's load-balanced public RPC: wait until it counts each mined transaction before the account's
+  next send (a reused nonce), and tolerate `eth_getLogs` ranges a lagging node refuses.
+
+**Live run, 2 November**, real HashKey QA payments, both `attribution_verified: true`, in the README's
+"Live on Ethereum Sepolia through HashKey QA" section: a creator registered, a licence bundle (images licence 1,
+video licence 2), an image payment (0.030007 USDC) and a video payment (0.090028 USDC), each recorded and its receipt
+anchored.
+

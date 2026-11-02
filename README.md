@@ -22,10 +22,10 @@ What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 
 (Fallback address for the same server: https://35-254-5-116.sslip.io.)
 
-The full app, running on HSK Chain testnet (chain 133). Its payments go through HSP Agentic Payment on our
-**offline MCP emulator, not HashKey's server**: HashKey's QA test USDC for HSK testnet hasn't reached us. One
-live payment on HashKey's QA server, on Ethereum Sepolia, runs from the admin page: see
-[Real HSP Agentic Payment on QA](#real-hsp-agentic-payment-on-qa).
+The full app, **live through HashKey's HSP Agentic Payment QA server on Ethereum Sepolia (testnet)**, paying in
+Circle's test USDC, as the organisers allow during the hackathon; see
+[Live on Ethereum Sepolia through HashKey QA](#live-on-ethereum-sepolia-through-hashkey-qa). The earlier HSK Chain
+testnet deployment is kept, and Verify still answers for files made there.
 
 **Sign in with Google** at the top right (email and profile only), then choose once per Google account:
 
@@ -43,7 +43,7 @@ live payment on HashKey's QA server, on Ethereum Sepolia, runs from the admin pa
 - **Creators** on the public site are people who signed in with Google, verified their YouTube channel and
   consented to their photo; the synthetic demo creator Ana Reyes (an illustration) is not shown there.
 - **Limits:** AI ads per UTC day: 3 images and 1 video per brand account, 10 images and 2 videos across the
-  server; at most 0.05 test USDT per image and 0.15 per video (8 s); one payment at a time; per-address rate
+  server; at most 0.05 test USDC per image and 0.15 per video (8 s); one payment at a time; per-address rate
   limits. Everything is testnet: the tokens have no value.
 - **Wallets:** payments come from the server's shared demo brand agent wallet (`0x8E9B246D…4DDec`) on behalf of
   every brand account; each creator gets a custodial testnet wallet, encrypted on the server. Brands and
@@ -78,7 +78,41 @@ Likeness project; what is reused and what is new: [docs/HACKATHON.md](docs/HACKA
   likeness, by brand, with "since revoked" on a revoked bundle's renders. Files load with the sign-in token:
   renders have no public URL, and anyone else checks a file through Verify.
 
-## Live on HSK Chain testnet (chain 133)
+## Live on Ethereum Sepolia through HashKey QA
+
+The organisers allow it during the hackathon (2 Nov 2026): "participants are welcome to deploy and test their smart
+contracts on Ethereum Sepolia during the hackathon; winning teams migrate to HSKChain Mainnet after", and their
+official test USDC is Circle's USDC on Ethereum Sepolia (faucet.circle.com). So the main flow runs there, live
+through HashKey's QA MCP server; the HSK testnet deployment below is kept, and the
+[HSK mainnet runbook](docs/MAINNET_RUNBOOK.md) is the migration if selected.
+
+| Contract (Ethereum Sepolia, 11155111) | Address (source verified on Sourcify, exact match, and Blockscout) |
+|---|---|
+| CreatorRegistry | [`0x1d24e01ed42bb3305dd4b5c50e98c8e29c573440`](https://sepolia.etherscan.io/address/0x1d24e01ed42bb3305dd4b5c50e98c8e29c573440) |
+| LicenseRegistry | [`0x802be473735a65ef4404f78d1b432bcd926d4382`](https://sepolia.etherscan.io/address/0x802be473735a65ef4404f78d1b432bcd926d4382) |
+| ReceiptAnchor | [`0xc1ca72b4fd33ab4af744ae110d47300849437680`](https://sepolia.etherscan.io/address/0xc1ca72b4fd33ab4af744ae110d47300849437680) |
+| HspSettlement (EIP-3009 rail) | [`0x4e6c1540787e2db272733c13dc4f9e61adbbb719`](https://sepolia.etherscan.io/address/0x4e6c1540787e2db272733c13dc4f9e61adbbb719) |
+| Token: Circle USDC (test, no value) | [`0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`](https://sepolia.etherscan.io/address/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238) |
+| Owner of all four: a Safe{Wallet} | [`0xA2562317E5452E27fa83fEc4415EcBB3EB4b34e4`](https://sepolia.etherscan.io/address/0xA2562317E5452E27fa83fEc4415EcBB3EB4b34e4) |
+
+**One live run, 2 Nov 2026, real HashKey QA payments** (a creator signed in with Google, a brand with another
+Google account):
+1. **Creator** verified by YouTube, photo with consent, terms on chain: [registered](https://sepolia.etherscan.io/tx/0xbbfdb6056a2a9d69fda6ce7897d93011c964545eb12ad8be846337fd4879818f),
+   [creator agent named](https://sepolia.etherscan.io/tx/0x6a9025d835e4a36ade972d2440c977c40c778fafd413552f100ba0f75ba9b232).
+2. **Licence bundle** (1 image, 1 video): [images licence 1](https://sepolia.etherscan.io/tx/0x4965d02cc8775150066f5e6aaffbdd97075b8490de7775fea5e24d747af8befc),
+   [video licence 2](https://sepolia.etherscan.io/tx/0x6369a585491533969444c1391378c0d10b7bf1d34d91b10d32f055976031b39e) (3× the image price).
+3. **Image**: HashKey QA order (flow `7bf10053…`), two approvals, [USDC payment](https://sepolia.etherscan.io/tx/0x32f767ff25f837e927f2e37f266dc6c2b5c2dccc8a41d3ff6463c1b3296a406f)
+   (0.030007 USDC: the 0.03 price plus QA's network fee in `token_total_raw`), payment-safe with
+   `attribution_verified: true`, [recorded](https://sepolia.etherscan.io/tx/0x1fd3bea3f2f0e9d4e2f734348740f97f635b929d2babab6b8b9c7acd8caba6b3) by the creator's agent,
+   AI image, [receipt anchored](https://sepolia.etherscan.io/tx/0xa8660e4c795142b248ddbe6e52481714f24d463a1370627d0de0c7e7ff7cbb0c).
+4. **Video**: order (flow `9f0d899c…`), [USDC payment](https://sepolia.etherscan.io/tx/0x85ee438b8bb37833f252694a45df6cf480d8b324dd5a290218cce3f7a8db9af5)
+   (0.090028 USDC), payment-safe with `attribution_verified: true`, [recorded](https://sepolia.etherscan.io/tx/0x9e98ed23cac5df65ebfe8b3f9f9711f9436803497b147d7f3faeeae07f564f5c),
+   8 s Veo video, [receipt anchored](https://sepolia.etherscan.io/tx/0xcaf80ace3ad045ec602dd60abe430031d767f9d42812734e1fb6da6c80fa2d70).
+
+Each payment took about 3 minutes from submission to recorded on Sepolia (HashKey QA reports payment-safe after
+half the required confirmations). Every page's transaction links go to Etherscan.
+
+## Earlier deployment: HSK Chain testnet (chain 133)
 
 | Contract | Address (verified on Blockscout) |
 |---|---|
@@ -114,20 +148,21 @@ prepares, signs exactly the `eip712` HSP returns, finalizes and submits, with **
 brand's Dashboard** (recipient, payer, `token_total_raw`) before signing and before submitting; the
 creator's agent follows `query_payment` every 15 s and reports the team attribution.
 
-**Status (2 Nov 2026):** HashKey allowlisted the server's address (35.254.5.116) on 1 Nov. From it we read
+**Status (2 Nov 2026): live.** HashKey allowlisted the server's address (35.254.5.116) on 1 Nov. From it we read
 the eight live tools, diffed their schemas against the emulator's (no stops) and saved the chain config:
 [`hsp-qa-tools.json`](deployments/hsp-qa-tools.json), [`hsp-qa-schema-diff.txt`](deployments/hsp-qa-schema-diff.txt),
-[`hsp-qa-chain-config.json`](deployments/hsp-qa-chain-config.json). On HSK testnet, QA pays in its own test USDC
-(`0x8FE3…53c6`), which hasn't reached us, so the public site's payments stay on the emulator.
+[`hsp-qa-chain-config.json`](deployments/hsp-qa-chain-config.json). QA's test USDC for HSK testnet never reached
+us, so the main flow moved to Ethereum Sepolia, where QA's chain config lists Circle's USDC: the public site's
+payments now run there, live through QA, with the results above.
 
-**Live HashKey QA payment on Ethereum Sepolia.** The organisers announced on 2 Nov 2026 that the official test
+**Admin-only live QA payment.** Before the main flow moved, the organisers announced on 2 Nov 2026 that the official test
 USDC is Circle's USDC on Ethereum Sepolia (faucet.circle.com) and that testing on Sepolia is allowed. HSP QA's
 `get_chain_config` lists it (`0x1c7D…7238`, eip3009, EIP-712 "USDC" version 2), so the admin page (`/admin`)
 runs one live payment there, from the server's brand wallet to a creator's payout: `get_chain_config`;
 `merchant_name`, `pay_to` and the payer confirmed one at a time (as QA's `create_order` asks); `create_order`;
 the two approvals; sign, `finalize_payment`, `submit_payment`; `query_payment` until safe or finalized, with the
-Sepolia transaction and `attribution_verified`. It is not a render, and our HSK Chain contracts don't record it
-(`agents/src/app/liveQa.ts`). The run's transaction is added here once it has been made.
+Sepolia transaction and `attribution_verified`. It is not a render, and our contracts don't record it
+(`agents/src/app/liveQa.ts`); it stays as an admin check alongside the main flow.
 
 Flow, rules and the redeploy plan: [docs/HSP_AGENTIC.md](docs/HSP_AGENTIC.md); the step-by-step live run:
 [docs/HSP_LIVE_RUN.md](docs/HSP_LIVE_RUN.md).
@@ -177,8 +212,8 @@ sequenceDiagram
     C->>H: create order (HMAC) with the AP2 Cart Mandate (ES256K JWT)
     C-->>B: Cart Mandate + payment request id
     B->>S: check payee = creator's payout, amount = licence price, licence active
-    B->>H: AP2 Payment Mandate + Permit2 signature (nonce bound to licence N, render i)
-    H->>S: execute the transfer: brand → creator's payout (USDT)
+    B->>H: AP2 Payment Mandate + EIP-3009 (or Permit2) signature
+    H->>S: execute the transfer: brand → creator's payout (USDC on Sepolia; USDT on HSK testnet)
     H-->>C: signed webhook (payment-included / safe / finalized)
     C->>S: recordPayment(licence, render, nonce, tx): only if the nonce executed on chain
     R->>S: anchorRender(sha256 of the file), signed by the render agent
@@ -260,7 +295,7 @@ after which both are refused before anything is signed; Verify shows the bundle 
   - the payer-side submit route;
   - where the Permit2 signature goes in the mandate, and the `user_authorization` format;
   - the JWT audience spelling.
-- **TestUSDT on testnet:** HSP's testnet USDT has no public faucet, and the official
+- **TestUSDT on the earlier HSK testnet deployment:** HSP's testnet USDT has no public faucet, and the official
   [faucet](https://hskchain.net/faucet) gives testnet HSK only, so payments on testnet use our own
   TestUSDT, which has no value. On mainnet, HSP's own USDT is used.
 - **Amount and recipient** are attested by the creator's agent, not proven on chain (see above).
