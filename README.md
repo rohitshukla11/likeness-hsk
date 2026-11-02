@@ -288,16 +288,25 @@ after which both are refused before anything is signed; Verify shows the bundle 
 
 ## Known limitations
 
-- **HSP Agentic Payment on QA not run yet:** waiting for HashKey's IP allowlisting. Until the contracts
-  are redeployed with the token HSP pays in, a QA payment is shown but not recorded on chain.
-- **HSP merchant API is emulated** until HashKey issues merchant credentials. Three details are unconfirmed and
-  isolated in one place each:
+- **Testnet, on Ethereum Sepolia during the hackathon:** payments run live through HashKey's HSP Agentic Payment
+  **QA** server (not production) on Ethereum Sepolia, in Circle's test USDC, which has no value. HashKey QA's test
+  USDC for HSK testnet never reached us, so the main flow moved to Sepolia as the organisers allow; HSK mainnet is
+  the migration if selected ([runbook](docs/MAINNET_RUNBOOK.md)).
+- **A payment takes about 3 minutes:** HashKey QA reports payment-safe after half of Sepolia's required
+  confirmations, and the payment is recorded and the ad made only then. QA also adds a small network fee to
+  `token_total_raw` (7 base units of USDC on an image in the live run), which the brand approves with the total.
+- **Sepolia's public RPC is load-balanced:** a lagging node can report an old transaction count or refuse a log
+  range past its own head. The app waits until each transaction is counted before the account's next send, and
+  retries or shortens refused log reads; a dashboard list can still be a few blocks behind for a moment.
+- **HSP merchant REST API: built, not used.** The live path is HSP Agentic Payment (MCP). The earlier merchant-API
+  path (HMAC, ES256K cart JWT, webhooks) stays behind one config file, unconfirmed in three details, each isolated
+  in one place:
   - the payer-side submit route;
   - where the Permit2 signature goes in the mandate, and the `user_authorization` format;
   - the JWT audience spelling.
 - **TestUSDT on the earlier HSK testnet deployment:** HSP's testnet USDT has no public faucet, and the official
-  [faucet](https://hskchain.net/faucet) gives testnet HSK only, so payments on testnet use our own
-  TestUSDT, which has no value. On mainnet, HSP's own USDT is used.
+  [faucet](https://hskchain.net/faucet) gives testnet HSK only, so payments there used our own TestUSDT, which has
+  no value. On HSK mainnet, HSP's own token is used.
 - **Amount and recipient** are attested by the creator's agent, not proven on chain (see above).
 - **AI ads cost money:** Vertex AI bills each image (about $0.04–0.07) and each second of video ($0.03 at 720p),
   so ads are capped per day (see above) and the project has a budget alert. Without `LIKENESS_AI=vertex`, or
@@ -312,14 +321,14 @@ after which both are refused before anything is signed; Verify shows the bundle 
   licence whose renders are all used stays "Exhausted"; Revoke revokes the bundle's licences that are still
   active.
 - **No C2PA in this build:** the earlier Likeness projects signed a C2PA content credential into each
-  render; this build drops it (a native module, and little value on SVG test renders). Verify relies on the
-  on-chain receipt keyed by the file's sha256, anchored only after the HSP payment was recorded.
+  render; this build drops it (a native module on a small server). Verify relies on the on-chain receipt keyed
+  by the file's sha256, anchored only after the HSP payment was recorded, and on the visible label in the pixels.
 - **Creator verification is ours, not KYC:** a creator's attestation is our attester's check of their YouTube
-  channel plus their own 18+ declaration. Ana Reyes is synthetic (an illustration); the landing photos are the
-  ones from the earlier Likeness app (likeness-arc).
-- **Single instance:** one process holds the agents' state. A production deployment would use a
-  persistent store.
-
+  channel plus their own 18+ declaration. The synthetic demo creator Ana Reyes (an illustration) isn't shown on
+  the public site; the landing photos are the ones from the earlier Likeness app (likeness-arc).
+- **Single server:** accounts, bundles and render records are in SQLite on the server's disk, but a payment's
+  approvals and HSP status polling live in the running process: if the server restarts during a payment, that
+  payment's recording has to be completed by hand. A production deployment would use a job queue.
 ## Run it
 
 ```sh
