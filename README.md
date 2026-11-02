@@ -16,10 +16,14 @@ before anything is signed.
 Built for the **HSK Chain Horizon Hackathon**, track **Agent Payments & A2A Settlement (HSP)**.
 What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 
-## Try it: https://35-254-5-116.sslip.io
+## Try it: https://hsk.likeness.site
 
-The full app, running on HSK Chain testnet (chain 133) with HSP Agentic Payment through our offline MCP
-emulator until HashKey's QA server allowlists this server's address (35.254.5.116); the banner says which.
+(Fallback address for the same server: https://35-254-5-116.sslip.io.)
+
+The full app, running on HSK Chain testnet (chain 133). Its payments go through HSP Agentic Payment on our
+**offline MCP emulator, not HashKey's server**: HashKey's QA test USDC for HSK testnet hasn't reached us. One
+live payment on HashKey's QA server, on Ethereum Sepolia, runs from the admin page: see
+[Real HSP Agentic Payment on QA](#real-hsp-agentic-payment-on-qa).
 
 **Sign in with Google** at the top right (email and profile only), then choose once per Google account:
 
@@ -34,13 +38,14 @@ emulator until HashKey's QA server allowlists this server's address (35.254.5.11
   licences), the payments you received, and **Ads made with your likeness** across all brands.
 - **Open to everyone:** the landing page, creators and their terms, **Verify** (drop a file: Licensed,
   Expired, Revoked or Unknown, with the bundle and the exact prompt), How it works and the A2A agent cards.
-- **Ana Reyes** is the synthetic demo creator (an illustration, no photo), so her ads are marked TEST RENDERs.
+- **Creators** on the public site are people who signed in with Google, verified their YouTube channel and
+  consented to their photo; the synthetic demo creator Ana Reyes (an illustration) is not shown there.
 - **Limits:** AI ads per UTC day: 3 images and 1 video per brand account, 10 images and 2 videos across the
   server; at most 0.05 test USDT per image and 0.15 per video (8 s); one payment at a time; per-address rate
   limits. Everything is testnet: the tokens have no value.
 - **Wallets:** payments come from the server's shared demo brand agent wallet (`0x8E9B246D…4DDec`) on behalf of
-  every brand account; each creator gets a custodial testnet wallet, encrypted on the server. The admin
-  fallback (`/admin`, demo password) is for the team.
+  every brand account; each creator gets a custodial testnet wallet, encrypted on the server. Brands and
+  creators only ever sign in with Google; the demo password is just the admin fallback (`/admin`), for the team.
 
 The web UI (`web/`, Next.js) was rebuilt during the hackathon from the design of Rohit's earlier
 Likeness project; what is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
@@ -103,13 +108,26 @@ switches on with one config file ([docs/HSP_SETUP.md](docs/HSP_SETUP.md)).
 HashKey's **HSP Agentic Payment** MCP server (QA, guide revision 2026-10-30) is wired into both agents
 through the official MCP client SDK: the creator's agent creates the order (`merchant_name` "Likeness",
 `pay_to` the creator's on-chain payout, network and token from `get_chain_config`); the brand's agent
-prepares, signs exactly the `eip712` HSP returns, finalizes and submits, with **two approvals in the
-brand console** (recipient, payer, `token_total_raw`) before signing and before submitting; the
+prepares, signs exactly the `eip712` HSP returns, finalizes and submits, with **two approvals on the
+brand's Dashboard** (recipient, payer, `token_total_raw`) before signing and before submitting; the
 creator's agent follows `query_payment` every 15 s and reports the team attribution.
 
-**Status:** built and tested offline against an MCP emulator with the same eight tools. The first QA
-payment waits for HashKey to allowlist our egress IP (the one health check so far answered 403). Flow,
-rules and the redeploy plan: [docs/HSP_AGENTIC.md](docs/HSP_AGENTIC.md); the step-by-step live run:
+**Status (2 Nov 2026):** HashKey allowlisted the server's address (35.254.5.116) on 1 Nov. From it we read
+the eight live tools, diffed their schemas against the emulator's (no stops) and saved the chain config:
+[`hsp-qa-tools.json`](deployments/hsp-qa-tools.json), [`hsp-qa-schema-diff.txt`](deployments/hsp-qa-schema-diff.txt),
+[`hsp-qa-chain-config.json`](deployments/hsp-qa-chain-config.json). On HSK testnet, QA pays in its own test USDC
+(`0x8FE3…53c6`), which hasn't reached us, so the public site's payments stay on the emulator.
+
+**Live HashKey QA payment on Ethereum Sepolia.** The organisers announced on 2 Nov 2026 that the official test
+USDC is Circle's USDC on Ethereum Sepolia (faucet.circle.com) and that testing on Sepolia is allowed. HSP QA's
+`get_chain_config` lists it (`0x1c7D…7238`, eip3009, EIP-712 "USDC" version 2), so the admin page (`/admin`)
+runs one live payment there, from the server's brand wallet to a creator's payout: `get_chain_config`;
+`merchant_name`, `pay_to` and the payer confirmed one at a time (as QA's `create_order` asks); `create_order`;
+the two approvals; sign, `finalize_payment`, `submit_payment`; `query_payment` until safe or finalized, with the
+Sepolia transaction and `attribution_verified`. It is not a render, and our HSK Chain contracts don't record it
+(`agents/src/app/liveQa.ts`). The run's transaction is added here once it has been made.
+
+Flow, rules and the redeploy plan: [docs/HSP_AGENTIC.md](docs/HSP_AGENTIC.md); the step-by-step live run:
 [docs/HSP_LIVE_RUN.md](docs/HSP_LIVE_RUN.md).
 
 **Mainnet-ready: one-command runbook, executed if selected.** The HSK Chain organisers announced in
@@ -282,10 +300,11 @@ cd ../web && pnpm install && pnpm build && pnpm start  # the web UI on http://lo
 **Pages (web UI):**
 - **Creators** and each creator's profile: on-chain terms and the licence bundle request.
 - **Dashboard**, by role: choose Brand or Creator; creator onboarding (YouTube, photo, terms, register);
-  the brand console (bundles with Make image / Make video, the editable prompt, the two approvals, HSP's
+  the brand's view (bundles with Make image / Make video, the editable prompt, the two approvals, HSP's
   status, each step with explorer links, the result, galleries, "Behind the scenes"); the creator's bundles,
   revoke, payments and "Ads made with your likeness".
 - **Verify:** Licensed / Expired / Revoked / Unknown for any file. **How it works:** the flow and the contracts.
+- **Admin** (`/admin`, demo password, the team only): the admin session and the live HashKey QA payment on Sepolia.
 - The original console (`agents/public`) is served at `/console` by the agents app.
 
 **Testnet run:** `pnpm run testnet` (needs the project's keystores).

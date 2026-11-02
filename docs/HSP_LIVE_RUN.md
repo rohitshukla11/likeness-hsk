@@ -20,7 +20,7 @@ Total: about **2 h 15 min**, most of it waiting for confirmations and the video.
 | c | Chain config | 5 min |
 | d | Funding and approval (Rohit) | 15 min |
 | e | Redeploy, verify, Safe | 30 min |
-| f | Live run in the brand console | 20 min |
+| f | Live run on the brand's Dashboard | 20 min |
 | g | Second run and revoke (video) | 30 min |
 | h | README / BUIDL | 20 min |
 
@@ -29,9 +29,11 @@ Total: about **2 h 15 min**, most of it waiting for confirmations and the video.
 ```sh
 vm curl -s https://api.ipify.org                    # expected 35.254.5.116
 gcloud compute ssh likeness-hsk-vm --zone=us-central1-a --project=likeness-hsk --tunnel-through-iap --quiet \
-  --command='echo HSP_ALLOWLISTED=1 | sudo tee /etc/likeness.env >/dev/null && sudo systemctl restart likeness && sleep 20 && systemctl is-active likeness'
+  --command='echo HSP_ALLOWLISTED=1 | sudo tee -a /etc/likeness.env >/dev/null && sudo systemctl restart likeness && sleep 60 && systemctl is-active likeness'
 ```
-Success: `35.254.5.116`, then `active`; the public banner reads "HSP Agentic Payment: HashKey QA (MCP)".
+Append (`tee -a`), never overwrite: `/etc/likeness.env` also holds `LIKENESS_AI`, `LIKENESS_DEMO_CREATOR` and
+`HSP_QA_LIVE_RUN`. Success: `35.254.5.116`, then `active`, and https://hsk.likeness.site/api/state shows
+`"gateway":"hsp-agentic-qa"` (the site shows no gateway banner).
 **Stop** if the IP differs, or if the app doesn't start (its log: `sudo journalctl -u likeness -n 30`).
 
 **b. Live tools, saved schemas, diff against the emulator** (10 min)
@@ -85,10 +87,12 @@ Success: three new verified contracts, all owned by the Safe; the previous deplo
 `deployments/testnet-<date>-usdt.json`; CreatorRegistry unchanged; `setAgent` mined (nothing paid); the
 public app shows the new contracts.
 
-**f. The live run in the brand console** (20 min)
+**f. The live run on the brand's Dashboard** (20 min)
 
-https://35-254-5-116.sslip.io/brand (banner: "HSP Agentic Payment: HashKey QA (MCP)"); unlock with the demo
-password. Take a licence → Pay for next render. **Approval 1** (before signing): check the recipient is the
+https://hsk.likeness.site: **Sign in with Google** as a brand account (brands and creators always use Google;
+the demo password is only the admin fallback). Check `/api/state` shows `"gateway":"hsp-agentic-qa"`.
+Creators → a creator → Request licence (a bundle) → Dashboard → **Make image** → keep or edit the prompt →
+**Pay and make the image**. **Approval 1** (before signing): check the recipient is the
 creator's payout (the VM creator 0xD2925E4A…29ca9), the payer is the VM brand 0x8E9B…4DDec, and
 `token_total_raw` → Approve and sign. **Approval 2**
 (before submitting): the same three → Approve and submit. Then the timeline: `query_payment` every 15 s
@@ -100,10 +104,31 @@ create another order.
 **g. Second run, then revoke: for the video** (30 min)
 
 Record per docs/submission/VIDEO_SCRIPT.md, variant A: a second paid render (both approvals on camera),
-then Creator page → Revoke, then Pay again → refused before anything is signed.
+then the creator's Dashboard → Revoke, then the brand's Dashboard → Make image → refused before anything is
+signed.
 
 **h. README and BUIDL** (20 min)
 
 Replace "not run yet" in README "Real HSP Agentic Payment on QA" and BUIDL with the real links: the
 payment tx (from `payment.tx_signature`), recordPayment, receipt, revoke, and `attribution_verified:
 true`, the payment status (safe or finalized, as reported) and `token_total_raw` in raw units.
+
+## Live HashKey QA payment on Ethereum Sepolia (admin)
+
+The organisers announced on 2 Nov 2026 that the official test USDC is Circle's USDC on Ethereum Sepolia
+(faucet.circle.com) and that testing on Sepolia is allowed. HSP QA's `get_chain_config` lists it:
+`0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`, chain 11155111, eip3009, EIP-712 domain "USDC" version "2".
+This run uses it while the public site's payments stay on the emulator (`HSP_ALLOWLISTED` stays unset).
+
+- **Enabled by** `HSP_QA_LIVE_RUN=1` in `/etc/likeness.env` (appended). It connects to QA for this run only.
+- **Funding:** the VM brand `0x8E9B…4DDec` needs Circle USDC on Sepolia (0.05 per run plus any fee in the
+  total; 1 USDC sent on 2 Nov). No ETH: HSP submits the transaction.
+- **Run:** https://hsk.likeness.site/admin → Login (demo password) → **Live HashKey QA payment** → Start →
+  confirm `merchant_name` (Likeness), then `pay_to` (the creator's payout, `0xD2925E4A…29ca9`), then the payer
+  (`0x8E9B…4DDec`) → approval 1 (recipient, payer, `token_total_raw`) → Approve and sign → approval 2 → Approve
+  and submit → `query_payment` every 15 s until payment-safe or payment-finalized.
+- **Result:** the card shows the Sepolia transaction link and `attribution_verified`; the run is saved on the
+  VM as `/opt/likeness/deployments/hsp-qa-live-payment.json` (no keys or signatures). It is not a render, and
+  our HSK Chain contracts don't record it.
+- **Stop** on payment-failed (report the reason) or `attribution_verified: false`; never start a second order
+  for a payment that is still pending.

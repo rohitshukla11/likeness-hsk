@@ -189,7 +189,7 @@ Written new for this project, after HashKey published its HSP Agentic Payment gu
 ## 30 October: the public server (GCP)
 
 Written new: the full app on a Compute Engine e2-micro (project `likeness-hsk`, us-central1) at the static
-address 35.254.5.116, behind Caddy with Let's Encrypt on https://35-254-5-116.sslip.io, run by systemd.
+address 35.254.5.116, behind Caddy with Let's Encrypt on https://hsk.likeness.site (and https://35-254-5-116.sslip.io as a fallback), run by systemd.
 
 - `agents/src/app/guard.ts` (`LIKENESS_PUBLIC=1`): operator actions need the demo password (a signed
   HttpOnly, Secure, SameSite=Strict session), per-IP rate limits, one payment at a time, at most 10 paid
@@ -246,4 +246,21 @@ Veo `predictLongRunning` then `fetchPredictOperation`, `personGeneration: allow_
 check through `channels.list mine=true`; and the gallery card's layout (preview left, details and actions
 right). likeness-ai's face-match quality gate, C2PA signing, KMS receipts, Firestore and Cloud Storage were
 not used.
+
+## 1–2 November: the live HashKey QA payment on Ethereum Sepolia, the domain
+
+**New:**
+- The gateway banner (28 October) was removed on 1 November at Rohit's request; the README says which
+  gateway runs (the public site's payments use our offline MCP emulator, not HashKey's server).
+- The organisers announced on 2 November that the official test USDC is Circle's USDC on Ethereum Sepolia
+  (faucet.circle.com) and that testing on Sepolia is allowed. `agents/src/app/liveQa.ts` and the admin card
+  `web/components/admin/LiveQaPayment.tsx` (commit b8b99d9) run one live HSP Agentic Payment on HashKey's QA
+  server there: `get_chain_config`, `merchant_name`, `pay_to` and the payer confirmed one at a time,
+  `create_order`, the two approvals, sign, finalize, submit, `query_payment` to safe or finalized, the Sepolia
+  transaction and `attribution_verified`. It is admin-only, not a render, and not recorded by our HSK Chain
+  contracts. `agents/src/hsp/agentic/qaRehearsal.ts` is an offline stand-in for the tests and for a local
+  rehearsal; `HspAgentic.connectQa` takes the run's own opt-in (`HSP_QA_LIVE_RUN=1`), so the main flow stays
+  on the emulator.
+- The public server answers on https://hsk.likeness.site (Let's Encrypt through Caddy; the sslip.io address
+  stays as a fallback), which is also the agents' public URL in their A2A cards.
 
