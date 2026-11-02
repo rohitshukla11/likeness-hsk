@@ -16,6 +16,8 @@ before anything is signed.
 Built for the **HSK Chain Horizon Hackathon**, track **Agent Payments & A2A Settlement (HSP)**.
 What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 
+**Demo video:** https://youtu.be/fhu-Uw2wYeE
+
 ## Try it: https://hsk.likeness.site
 
 (Fallback address for the same server: https://35-254-5-116.sslip.io.)
