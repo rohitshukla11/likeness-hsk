@@ -185,6 +185,7 @@ export class Onboarding {
     if (balance < CREATOR_GAS / 2n) {
       const hash = await ch.wallet(this.c.funder).sendTransaction({ to: me.address, value: CREATOR_GAS - balance } as never);
       await ch.public.waitForTransactionReceipt({ hash });
+      await ch.counted(this.c.funder.address, hash);
       this.c.log.add("chain", "tx", `funded creator wallet ${me.address} with ${formatEther(CREATOR_GAS - balance)} test ${ch.d.chainId === 11155111 ? "ETH" : "HSK"}`, { tx: hash });
       // A load-balanced RPC can answer from a node that hasn't seen the funding yet: wait until it shows.
       for (let i = 0; i < 40 && (await ch.public.getBalance({ address: me.address, blockTag: "latest" })) < CREATOR_GAS / 2n; i++) await new Promise((r) => setTimeout(r, 500));

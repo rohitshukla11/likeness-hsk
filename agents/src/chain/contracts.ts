@@ -122,7 +122,19 @@ export class Likeness {
     for (let i = 0; i < 20 && (await this.public.getBlockNumber({ cacheTime: 0 })) < receipt.blockNumber; i++) {
       await new Promise((r) => setTimeout(r, 250));
     }
+    await this.counted(account.address, hash);
     return receipt;
+  }
+
+  /**
+   * A load-balanced RPC (Sepolia's public one) can still report an account's transaction count from before a
+   * mined transaction, and the next send would reuse its nonce ("nonce too low"): wait until it counts it.
+   */
+  async counted(address: Address, hash: Hex) {
+    const { nonce } = await this.public.getTransaction({ hash });
+    for (let i = 0; i < 40 && (await this.public.getTransactionCount({ address, blockTag: "pending" })) <= nonce; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
   }
 }
 
