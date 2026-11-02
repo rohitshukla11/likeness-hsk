@@ -213,7 +213,7 @@ sequenceDiagram
     C-->>B: Cart Mandate + payment request id
     B->>S: check payee = creator's payout, amount = licence price, licence active
     B->>H: AP2 Payment Mandate + EIP-3009 (or Permit2) signature
-    H->>S: execute the transfer: brand → creator's payout (USDC on Sepolia; USDT on HSK testnet)
+    H->>S: execute the transfer: brand → creator's payout (USDC on Sepolia, USDT on HSK testnet)
     H-->>C: signed webhook (payment-included / safe / finalized)
     C->>S: recordPayment(licence, render, nonce, tx): only if the nonce executed on chain
     R->>S: anchorRender(sha256 of the file), signed by the render agent
