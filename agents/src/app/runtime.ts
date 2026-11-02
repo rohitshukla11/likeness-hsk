@@ -228,7 +228,10 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     };
   }
 
-  const dep = JSON.parse(readFileSync(`${deploymentsDir(opts.root)}/${opts.mode}.json`, "utf8"));
+  // LIKENESS_DEPLOYMENT picks another deployment file for the same mode (e.g. "sepolia": Ethereum Sepolia during
+  // the hackathon, per the organisers); unset, it is the mode's own (HSK testnet). Removing it is the rollback.
+  const dep = JSON.parse(readFileSync(`${deploymentsDir(opts.root)}/${process.env.LIKENESS_DEPLOYMENT || opts.mode}.json`, "utf8"));
+  if (opts.mode !== "mainnet" && [177, 1].includes(Number(dep.chainId))) throw new Error(`deployment ${process.env.LIKENESS_DEPLOYMENT} is on a mainnet (chain ${dep.chainId}); not in ${opts.mode} mode`);
   const d: Deployment = {
     chainId: dep.chainId,
     rpcUrl: dep.rpcUrl,
@@ -378,9 +381,11 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
     creator: creator.address,
     brandAddress: brandKey.address,
     startBlock: BigInt(dep.startBlock ?? 0),
-    previous: ((dep.previousDeployments ?? []) as { licences: Address; receipts: Address; settlement: Address; token: Address; tokenSymbol: string; rail: Deployment["rail"] }[]).map(
-      (p) => new Likeness({ ...d, licences: p.licences, receipts: p.receipts, settlement: p.settlement, token: p.token, tokenSymbol: p.tokenSymbol, rail: p.rail }, pub),
-    ),
+    // A previous deployment may be on another chain (HSK testnet before Sepolia): read it there.
+    previous: ((dep.previousDeployments ?? []) as { chainId?: number; rpcUrl?: string; explorer?: string; creators?: Address; licences: Address; receipts: Address; settlement: Address; token: Address; tokenSymbol: string; rail: Deployment["rail"] }[]).map((p) => {
+      const pd: Deployment = { ...d, chainId: p.chainId ?? d.chainId, rpcUrl: p.rpcUrl ?? d.rpcUrl, explorer: p.explorer ?? d.explorer, creators: p.creators ?? d.creators, licences: p.licences, receipts: p.receipts, settlement: p.settlement, token: p.token, tokenSymbol: p.tokenSymbol, rail: p.rail };
+      return new Likeness(pd, pd.chainId === d.chainId ? pub : (createPublicClient({ chain: chainOf(pd), transport: http(pd.rpcUrl) }) as PublicClient));
+    }),
     connect: connectAna,
     brandAccount: () => brandKey,
     revoke: async (id) => {

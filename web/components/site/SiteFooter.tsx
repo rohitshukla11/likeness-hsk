@@ -15,7 +15,7 @@ export function SiteFooter() {
           </h2>
           <div className="flex flex-col gap-3 text-[15px] text-grey-dark">
             <span className="text-white">License your face to AI. Your terms, paid per image.</span>
-            <span>HSK Chain testnet · paid through HSP · test tokens, no value</span>
+            <span>Testnet · paid through HSP · test tokens, no value</span>
             <Link href="/how" className="text-grey-dark underline-offset-2 hover:text-white hover:underline">
               How the agents pay
             </Link>

@@ -21,6 +21,7 @@ if (network === "mainnet" && broadcast && process.env.LIKENESS_MAINNET_FUND !== 
 // Mainnet amounts from the funding table (gas at 500 gwei); testnet gas is about 1 gwei.
 const AMOUNTS: Record<NetworkName, Record<string, string>> = {
   testnet: { creator: "0.006", "creator-agent": "0.006", brand: "0.006", "render-agent": "0.006" },
+  sepolia: { creator: "0.01", "creator-agent": "0.01", brand: "0.01", "render-agent": "0.01" },
   mainnet: { creator: "1", "creator-agent": "1.5", brand: "1.5", "render-agent": "2" },
 };
 

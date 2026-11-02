@@ -3,7 +3,7 @@
 /**
  * A new Google account chooses Brand or Creator once. Creators then connect their YouTube channel (read
  * once with YouTube read access; no token kept), add the photo they consent to show, set their terms and
- * register on HSK Chain with a custodial testnet wallet this server keeps for them.
+ * register on chain with a custodial testnet wallet this server keeps for them.
  */
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -12,6 +12,8 @@ import { Addr, Field, inputClass, Tx } from "@/components/ui";
 import { api, idTokenHeader, type Me, type Role } from "@/lib/api";
 import { CATEGORY_LABELS } from "@/lib/demo";
 import { youtubeAccessToken } from "@/lib/firebase";
+import { chainLabel } from "@/lib/chain";
+import { useAppState } from "@/components/site/AppState";
 
 export function ChooseRole({ onDone }: { onDone: () => Promise<unknown> }) {
   const [busy, setBusy] = useState<Role | null>(null);
@@ -54,6 +56,8 @@ const PRICES = ["0.01", "0.02", "0.03", "0.04", "0.05"];
 
 export function CreatorOnboarding({ me, onChange }: { me: Me; onChange: () => Promise<unknown> }) {
   const c = me.creator;
+  const { state } = useAppState();
+  const chain = chainLabel(state?.chainId);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const run = async (what: string, f: () => Promise<unknown>) => {
@@ -77,7 +81,7 @@ export function CreatorOnboarding({ me, onChange }: { me: Me; onChange: () => Pr
       {registered && (
         <Card tone="lime" title="You're a creator on Likeness">
           <p className="m-0 text-[14px]">
-            Registered on HSK Chain testnet <Tx hash={c.registeredTx!} label="view tx" />; the creator agent acts for you <Tx hash={c.agentTx ?? c.registeredTx!} label="view tx" />.
+            Registered on {chain} <Tx hash={c.registeredTx!} label="view tx" />; the creator agent acts for you <Tx hash={c.agentTx ?? c.registeredTx!} label="view tx" />.
             Brands can now license you within your terms.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -113,7 +117,7 @@ export function CreatorOnboarding({ me, onChange }: { me: Me; onChange: () => Pr
         <PhotoStep me={me} disabled={busy !== null || registered} onSaved={onChange} />
       </Step>
 
-      <Step n={3} title="Your terms, registered on HSK Chain" done={registered}>
+      <Step n={3} title={`Your terms, registered on ${chain}`} done={registered}>
         {registered ? (
           <p className="m-0 text-[14px] text-grey">
             Wallet <Addr a={c.address} /> · payout <Addr a={c.payout ?? c.address} />. Your terms are on your public profile.
@@ -221,6 +225,8 @@ function PhotoStep({ me, disabled, onSaved }: { me: Me; disabled: boolean; onSav
 }
 
 function TermsForm({ address, ready, busy, onSubmit }: { address: string; ready: boolean; busy: string | null; onSubmit: (t: Record<string, unknown>) => void }) {
+  const { state } = useAppState();
+  const chain = chainLabel(state?.chainId);
   const [price, setPrice] = useState("0.03");
   const [uses, setUses] = useState<number[]>([1 << 8, 1 << 9]);
   const [maxRenders, setMaxRenders] = useState(5);
@@ -241,7 +247,7 @@ function TermsForm({ address, ready, busy, onSubmit }: { address: string; ready:
           <select className={inputClass} value={price} onChange={(e) => setPrice(e.target.value)}>
             {PRICES.map((p) => (
               <option key={p} value={p}>
-                {p} USDT (testnet)
+                {p} {state?.token ?? "USDT"} (testnet)
               </option>
             ))}
           </select>
@@ -274,7 +280,7 @@ function TermsForm({ address, ready, busy, onSubmit }: { address: string; ready:
         <span>I am 18 or older</span>
       </label>
       <button type="submit" disabled={!ready || busy !== null || !adult || !uses.length || !payoutOk} className={btnClass("lime", "self-start")}>
-        {busy === "reg" ? "Registering on HSK Chain… (about a minute)" : "Register on HSK Chain"}
+        {busy === "reg" ? `Registering on ${chain}… (about a minute)` : `Register on ${chain}`}
       </button>
       {!ready && <p className="m-0 text-[13px] text-grey">Connect YouTube and save your photo first.</p>}
     </form>

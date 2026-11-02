@@ -33,10 +33,10 @@ export interface Deployment {
 export function chainOf(d: Deployment): Chain {
   return defineChain({
     id: d.chainId,
-    name: d.chainId === 177 ? "HashKey Chain" : d.chainId === 133 ? "HashKey Chain Testnet" : `chain ${d.chainId}`,
-    nativeCurrency: { name: "HSK", symbol: "HSK", decimals: 18 },
+    name: d.chainId === 177 ? "HashKey Chain" : d.chainId === 133 ? "HashKey Chain Testnet" : d.chainId === 11155111 ? "Ethereum Sepolia" : `chain ${d.chainId}`,
+    nativeCurrency: d.chainId === 11155111 ? { name: "Sepolia Ether", symbol: "ETH", decimals: 18 } : { name: "HSK", symbol: "HSK", decimals: 18 },
     rpcUrls: { default: { http: [d.rpcUrl] } },
-    blockExplorers: d.explorer ? { default: { name: "Blockscout", url: d.explorer } } : undefined,
+    blockExplorers: d.explorer ? { default: { name: d.chainId === 11155111 ? "Etherscan" : "Blockscout", url: d.explorer } } : undefined,
   });
 }
 

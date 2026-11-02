@@ -81,7 +81,7 @@ export function LiveQaPayment() {
       ) : (
         <p className="m-0 text-[14px] text-grey">
           {rawToDecimal(run?.amountRaw ?? "50000", 6)} USDC on Ethereum Sepolia (chain 11155111), from the server&apos;s brand wallet to the creator&apos;s payout, through {view.source === "rehearsal" ? "the offline rehearsal server (nothing is sent)" : "HashKey\u2019s QA MCP server"}. You
-          confirm merchant_name, pay_to and the payer, one at a time, then approve before signing and again before submitting. The public site&apos;s main flow stays on the emulator.
+          confirm merchant_name, pay_to and the payer, one at a time, then approve before signing and again before submitting. It is separate from the main flow: no licence, no render, nothing recorded by our contracts.
         </p>
       )}
       {view.enabled && !active && (

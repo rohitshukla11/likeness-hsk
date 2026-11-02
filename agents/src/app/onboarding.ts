@@ -19,7 +19,7 @@ export const PHOTO_MAX_BYTES = 3 * 1024 * 1024;
  * Test HSK a new creator wallet gets: registering uses about 0.00027 and naming the agent about 0.00005
  * (at 1 gwei), so 0.001 leaves room for several revokes.
  */
-export const CREATOR_GAS = parseEther("0.001");
+export const CREATOR_GAS = parseEther(process.env.LIKENESS_CREATOR_GAS ?? "0.001"); // LIKENESS_CREATOR_GAS: more where gas can spike (Sepolia)
 
 export class OnboardingError extends Error {
   constructor(
@@ -185,7 +185,7 @@ export class Onboarding {
     if (balance < CREATOR_GAS / 2n) {
       const hash = await ch.wallet(this.c.funder).sendTransaction({ to: me.address, value: CREATOR_GAS - balance } as never);
       await ch.public.waitForTransactionReceipt({ hash });
-      this.c.log.add("chain", "tx", `funded creator wallet ${me.address} with ${formatEther(CREATOR_GAS - balance)} test HSK`, { tx: hash });
+      this.c.log.add("chain", "tx", `funded creator wallet ${me.address} with ${formatEther(CREATOR_GAS - balance)} test ${ch.d.chainId === 11155111 ? "ETH" : "HSK"}`, { tx: hash });
       // A load-balanced RPC can answer from a node that hasn't seen the funding yet: wait until it shows.
       for (let i = 0; i < 40 && (await ch.public.getBalance({ address: me.address, blockTag: "latest" })) < CREATOR_GAS / 2n; i++) await new Promise((r) => setTimeout(r, 500));
     }

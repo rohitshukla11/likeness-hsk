@@ -14,6 +14,7 @@ import { SignIn } from "@/components/site/SignIn";
 import { Field, inputClass } from "@/components/ui";
 import { api, type BundleView, type CreatorView } from "@/lib/api";
 import { categoriesOf, displayOf } from "@/lib/demo";
+import { chainLabel } from "@/lib/chain";
 
 export function CreatorProfile({ address }: { address: string | undefined }) {
   const { state } = useAppState();
@@ -101,7 +102,7 @@ export function CreatorProfile({ address }: { address: string | undefined }) {
         </div>
 
         <div className="flex min-w-0 flex-col gap-[14px]">
-          <Card tone="ink" title={`${c?.synthetic ? "Her" : "Their"} terms, on HSK Chain`}>
+          <Card tone="ink" title={`${c?.synthetic ? "Her" : "Their"} terms, on ${chainLabel(state?.chainId)}`}>
             {t ? (
               <dl className="m-0 grid grid-cols-[9rem_1fr] gap-x-4 gap-y-2 text-[14px]">
                 <dt className="text-grey-dark">Price</dt>
@@ -179,7 +180,7 @@ export function CreatorProfile({ address }: { address: string | undefined }) {
                 <span className="text-grey">, paid per image or video when each is made</span>
               </p>
               <p className="m-0 text-[13px] text-grey">
-                One licence bundle: on HSK Chain that&apos;s one licence per media type (images at the creator&apos;s price, videos at {mult}×). Use: advertising; the brief is checked for banned uses before anything is issued or paid, and its hash is on chain.
+                One licence bundle: on chain that&apos;s one licence per media type (images at the creator&apos;s price, videos at {mult}×). Use: advertising; the brief is checked for banned uses before anything is issued or paid, and its hash is on chain.
               </p>
               <button type="submit" disabled={busy || !canRequest || !c || images + videos === 0} className={btnClass("lime", "self-start")}>
                 {busy ? "Asking the creator's agent…" : "Request licence"}
@@ -189,7 +190,7 @@ export function CreatorProfile({ address }: { address: string | undefined }) {
             {done && (
               <div className={`flex flex-wrap items-center gap-3 rounded-[16px] px-4 py-3 text-[14px] ${done.error ? "bg-bad-bg text-bad" : "bg-ok-bg text-ok"}`}>
                 <span className="flex-1">
-                  {done.error ? "Partly issued: " : "Licence bundle issued on HSK Chain, within " + her + " terms: "}
+                  {done.error ? "Partly issued: " : "Licence bundle issued on " + chainLabel(state?.chainId) + ", within " + her + " terms: "}
                   {[done.bundle.image && `images licence #${done.bundle.image.licenceId}`, done.bundle.video && `videos licence #${done.bundle.video.licenceId}`].filter(Boolean).join(", ")}
                   {done.error ? `. ${done.error}` : "."}
                 </span>

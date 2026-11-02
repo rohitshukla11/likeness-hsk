@@ -17,7 +17,7 @@ import { BUILT_ON, MEASUREMENTS, TESTIMONIALS } from "@/lib/site-content";
 
 
 const RIBBON_A = ["Advertising", "✳", "Social", "✳", "Editorial", "✳", "Entertainment", "✳", "Product", "✳"];
-const RIBBON_B = ["Agents agree over A2A", "✳", "Paid per render through HSP", "✳", "Revoke any time", "✳", "Receipts on HSK Chain", "✳"];
+const RIBBON_B = ["Agents agree over A2A", "✳", "Paid per render through HSP", "✳", "Revoke any time", "✳", "Receipts on chain", "✳"];
 
 export function Landing() {
   return (
@@ -154,7 +154,7 @@ function Stats() {
             <span className="mt-auto self-start rounded-full bg-violet-deep px-3.5 py-1.5 text-[13px] font-semibold text-white">For brands</span>
             <h3 className="m-0 font-display text-[clamp(20px,2.4vw,26px)] font-extrabold">AGENTS THAT PAY FOR CONSENT</h3>
             <p className="m-0 max-w-[460px] text-[15px] leading-relaxed text-[#3E4148]">
-              A brand&apos;s agent asks the creator&apos;s agent over A2A. Each render is quoted from the creator&apos;s terms on HSK Chain, approved by a
+              A brand&apos;s agent asks the creator&apos;s agent over A2A. Each render is quoted from the creator&apos;s terms on chain, approved by a
               person twice, and paid through HSP before it exists.
             </p>
           </article>
@@ -181,7 +181,7 @@ function Stats() {
 // ---------------------------------------------------------------- how it works
 
 const STEPS = [
-  { title: "SET YOUR TERMS", body: "A price per render, uses, regions, a cap and a maximum duration, in CreatorRegistry on HSK Chain. Political, adult and deceptive uses are banned in the contract." },
+  { title: "SET YOUR TERMS", body: "A price per render, uses, regions, a cap and a maximum duration, in CreatorRegistry, on chain. Political, adult and deceptive uses are banned in the contract." },
   { title: "AGENTS AGREE", body: "A brand's agent asks your agent for a licence over A2A. Your agent checks it against your on-chain terms, and the licence is issued on chain." },
   { title: "PAID THROUGH HSP", body: "For each render your agent creates an HSP order paid to you. The brand approves twice, signs exactly what HSP returned, and HSP settles it on HSK Chain." },
   { title: "RECEIPT, OR REVOKE", body: "Each paid render is recorded in HspSettlement and gets a receipt anyone can verify. Revoke and the next render is refused before anything is signed." },

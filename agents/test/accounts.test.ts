@@ -33,6 +33,12 @@ describe("app records across a redeploy", () => {
       expect(a.account("u1")?.email).toBe("u1@example.com");
       expect(a.creator("u1")?.address).toBe("0x00000000000000000000000000000000000000c1");
       expect(a.ensureDeployment("0x00000000000000000000000000000000000000b2")).toBe(0);
+      // A rollback to the earlier registry brings its records back (and archives the newer, empty ones).
+      expect(a.ensureDeployment("0x00000000000000000000000000000000000000a1")).toBe(0);
+      expect(a.licenceOwner("1")).toBe("u1");
+      expect(a.bundles().map((b) => b.id)).toEqual(["B1"]);
+      expect(a.renders().map((r) => r.assetHash)).toEqual([hash]);
+      expect(a.render(hash)?.prompt).toBe("p");
       a.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

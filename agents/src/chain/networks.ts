@@ -18,6 +18,15 @@ export const NETWORKS = {
     // HSP's testnet USDT (Permit2) has no public faucet, so testnet runs use our TestUSDT.
     usdt: "0x372325443233fEbaC1F6998aC750276468c83CC6" as Address,
   },
+  // Ethereum Sepolia: the organisers allow deploying and testing there during the hackathon (2 Nov 2026).
+  // HSP QA pays in Circle's USDC (EIP-3009), read from get_chain_config at deploy time.
+  sepolia: {
+    chainId: 11155111,
+    rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
+    explorer: "https://sepolia.etherscan.io",
+    hspNetwork: "sepolia",
+    usdt: "0x0000000000000000000000000000000000000000" as Address,
+  },
 } as const;
 
 export const PERMIT2_ADDRESS: Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3";

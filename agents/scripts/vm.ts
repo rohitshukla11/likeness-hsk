@@ -128,6 +128,52 @@ if (args[0] === "keys") {
   } else console.log(`\nFor Rohit to run (the new brand approves Permit2 for 1 test USDT; cast asks nothing, the password is read from the file):
 cast send ${dep.token} "approve(address,uint256)" ${dep.permit2} 1000000 \\
   --keystore .secrets/vm/keystores/brand --password-file .secrets/vm/keystore-password --rpc-url ${dep.rpcUrl}`);
+} else if (args[0] === "sepolia-creator") {
+  // Ethereum Sepolia (deployments/sepolia.json): the server's own creator registers, attested by the VM's
+  // attester (the Sepolia CreatorRegistry's), and names the VM creator agent on HspSettlement. Gas was sent by
+  // the deployer beforehand. Dry run without --broadcast.
+  const broadcast = args.includes("--broadcast");
+  const dep = JSON.parse(readFileSync(`${deploymentsDir(root)}/sepolia.json`, "utf8"));
+  if (dep.chainId !== 11155111) throw new Error("Ethereum Sepolia (chain 11155111) only");
+  const chain = chainOf({ chainId: dep.chainId, rpcUrl: dep.rpcUrl, explorer: dep.explorer } as Deployment);
+  const pub = createPublicClient({ chain, transport: http(dep.rpcUrl) });
+  const vmPw = readFileSync(`${dir}/keystore-password`, "utf8").trimEnd();
+  const creator = loadAccount(`${dir}/keystores/creator`, vmPw);
+  const agent = loadAccount(`${dir}/keystores/creator-agent`, vmPw).address;
+  const attester = loadAccount(`${dir}/keystores/attester`, vmPw);
+  const onChain = await pub.readContract({ address: dep.creators, abi: parseAbi(["function attester() view returns (address)"]), functionName: "attester" });
+  if (onChain.toLowerCase() !== attester.address.toLowerCase()) throw new Error(`the registry's attester is ${onChain}, not the VM's ${attester.address}`);
+  console.log(`creator ${creator.address}: ${formatEther(await pub.getBalance({ address: creator.address }))} ETH; attester ${attester.address}; agent ${agent}`);
+  const send = async (label: string, req: { address: Address; abi: Abi; functionName: string; args: unknown[] }) => {
+    if (!broadcast) return console.log(`${label.padEnd(30)} (dry run)`);
+    const w = createWalletClient({ account: creator, chain, transport: http(dep.rpcUrl) });
+    const hash = await w.writeContract(req as Parameters<typeof w.writeContract>[0]);
+    const r = await pub.waitForTransactionReceipt({ hash });
+    if (r.status !== "success") throw new Error(`${label} reverted: ${dep.explorer}/tx/${hash}`);
+    console.log(`${label.padEnd(30)} ${dep.explorer}/tx/${hash}`);
+  };
+  if (await pub.readContract({ address: dep.creators, abi: creatorRegistryAbi, functionName: "isRegistered", args: [creator.address] })) console.log("creator already registered");
+  else {
+    const a = {
+      referenceSetHash: `0x${randomBytes(32).toString("hex")}` as const,
+      livenessSessionHash: `0x${randomBytes(32).toString("hex")}` as const,
+      livenessProvider: stringToHex("synthetic-demo", { size: 32 }),
+      ageProvider: stringToHex("synthetic-demo", { size: 32 }),
+      verifiedAt: BigInt(Math.floor(Date.now() / 1000)),
+      adult: true,
+    };
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+    const digest = await pub.readContract({ address: dep.creators, abi: creatorRegistryAbi, functionName: "attestationDigest", args: [creator.address, a, 0n, deadline] });
+    await send("register the server's creator", {
+      address: dep.creators,
+      abi: creatorRegistryAbi as Abi,
+      functionName: "register",
+      args: [creator.address, a, deadline, await attester.sign!({ hash: digest }), { categories: ADVERTISING | (1 << 9), regions: 0xffff, maxDuration: 30n * 86400n, maxRenders: 10, pricePerRender: 50_000n, autoApprove: true }],
+    });
+  }
+  const named = await pub.readContract({ address: dep.settlement, abi: hspSettlementAbi, functionName: "agentOf", args: [creator.address] });
+  if ((named as string).toLowerCase() === agent.toLowerCase()) console.log("creator agent already set");
+  else await send("setAgent(creator-agent)", { address: dep.settlement, abi: hspSettlementAbi as Abi, functionName: "setAgent", args: [agent] });
 } else if (args[0] === "attester") {
   const broadcast = args.includes("--broadcast");
   const dep = JSON.parse(readFileSync(`${deploymentsDir(root)}/testnet.json`, "utf8"));

@@ -322,7 +322,8 @@ export class Accounts {
   /**
    * The app's records are tied to one LicenseRegistry (licence ids start again on a new one). When the
    * deployment changes, its licences, bundles and render records move to archived_* tables, tagged with
-   * the registry they belonged to; accounts, creators and today's caps stay. Returns the rows moved.
+   * the registry they belonged to; accounts, creators and today's caps stay. Switching back to an earlier
+   * registry (a rollback) brings its archived records back. Returns the rows moved out.
    */
   ensureDeployment(licences: string): number {
     const cur = (this.db.prepare("select value from meta where key = 'licences'").get() as { value: string } | undefined)?.value;
@@ -330,11 +331,16 @@ export class Accounts {
     let moved = 0;
     this.db.exec("begin");
     try {
-      if (cur) {
-        for (const t of ["licences", "licence_meta", "bundles", "renders"]) {
+      for (const t of ["licences", "licence_meta", "bundles", "renders"]) {
+        if (cur) {
           this.db.exec(`create table if not exists archived_${t} as select '' as deployment, * from ${t} where 0`);
           moved += Number(this.db.prepare(`insert into archived_${t} select ?, * from ${t}`).run(cur).changes);
           this.db.exec(`delete from ${t}`);
+        }
+        if (this.db.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(`archived_${t}`)) {
+          const cols = (this.db.prepare(`pragma table_info(${t})`).all() as { name: string }[]).map((c) => `"${c.name}"`).join(", ");
+          this.db.prepare(`insert into ${t} (${cols}) select ${cols} from archived_${t} where lower(deployment) = lower(?)`).run(licences);
+          this.db.prepare(`delete from archived_${t} where lower(deployment) = lower(?)`).run(licences);
         }
       }
       this.db.prepare("insert into meta (key, value) values ('licences', ?) on conflict(key) do update set value = excluded.value").run(licences);

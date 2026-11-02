@@ -55,30 +55,8 @@ export function Button({
   );
 }
 
-/** HSK Chain testnet's Blockscout explorer. */
-export const EXPLORER = "https://testnet-explorer.hskchain.net";
-
-export function Tx({ hash, label }: { hash: string; label?: string }) {
-  return (
-    <a className="font-mono text-[13px] text-wait underline-offset-2 hover:underline" href={`${EXPLORER}/tx/${hash}`} target="_blank" rel="noreferrer">
-      {label ?? `${hash.slice(0, 10)}…${hash.slice(-6)}`}
-      <span className="sr-only"> (opens the HSK Chain explorer)</span>
-    </a>
-  );
-}
-export function Addr({ a, href }: { a: string; href?: string }) {
-  const short = `${a.slice(0, 6)}…${a.slice(-4)}`;
-  return href ? (
-    <Link href={href} className="tnum font-mono underline-offset-2 hover:underline">
-      {short}
-    </Link>
-  ) : (
-    <a href={`${EXPLORER}/address/${a}`} target="_blank" rel="noreferrer" className="tnum font-mono underline-offset-2 hover:underline">
-      {short}
-      <span className="sr-only"> (opens the HSK Chain explorer)</span>
-    </a>
-  );
-}
+// Links on the backend's chain (client components, they read its explorer from /api/state).
+export { Addr, EXPLORER, Tx } from "./ChainLinks";
 
 export function Note({ tone = "warn", children }: { tone?: Tone; children: ReactNode }) {
   const c = tone === "warn" || tone === "blue" ? "text-wait" : tone === "down" ? "text-bad" : tone === "up" ? "text-ok" : "text-grey";

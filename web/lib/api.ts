@@ -176,6 +176,10 @@ export type JobView = { job: Job; approvals: Approval[]; statuses: HspStatus[]; 
 
 export type Verdict = {
   verdict: "Licensed" | "Revoked" | "Expired" | "Unknown";
+  /** Where the receipt was found: Ethereum Sepolia, or HSK testnet for files made before the move. */
+  chainId?: number;
+  explorer?: string | null;
+  tokenSymbol?: string;
   reason?: string;
   licenceStatus?: string;
   licenceId?: string;

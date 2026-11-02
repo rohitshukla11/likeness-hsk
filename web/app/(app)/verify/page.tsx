@@ -3,7 +3,7 @@
 /**
  * Verify: anyone drops a file (hashed in the browser, never uploaded) or pastes its sha256, and sees
  * Licensed, Revoked ("licensed when made, since revoked"), Expired or Unknown, with the creator, the
- * licensee, the HSP payment and the receipt on HSK Chain behind the answer.
+ * licensee, the HSP payment and the receipt on chain behind the answer.
  */
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -13,6 +13,8 @@ import { IconCheck, IconCross, IconQuestion, IconUpload } from "@/components/ds/
 import { Addr, fmtDate, fmtDay, inputClass, Tx } from "@/components/ui";
 import { api, sha256Hex, type CreatorView, type Verdict } from "@/lib/api";
 import { displayOf } from "@/lib/demo";
+import { chainLabel } from "@/lib/chain";
+import { useAppState } from "@/components/site/AppState";
 
 const LOOK = {
   Licensed: { bg: "bg-lime", stroke: "#DCF37B", stamp: "Licensed", icon: IconCheck },
@@ -34,6 +36,9 @@ function Verify() {
   const [hash, setHash] = useState(params.get("hash") ?? "");
   const [checked, setChecked] = useState<string | null>(null);
   const [result, setResult] = useState<Verdict | null>(null);
+  const { state } = useAppState();
+  // The chain of the receipt (Sepolia, or HSK testnet for files made before the move), else the server's.
+  const chain = chainLabel(result?.chainId ?? state?.chainId);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState<{ url: string; size: number; type: string } | null>(null);
@@ -142,7 +147,7 @@ function Verify() {
               ) : (
                 <>
                   <span className="text-[26px] font-bold leading-tight">{busy ? "Checking…" : "Ready when you are"}</span>
-                  <span className="text-[14px] text-grey">We hash the file and look up its receipt on HSK Chain. Nothing is stored.</span>
+                  <span className="text-[14px] text-grey">We hash the file and look up its receipt on {chain}. Nothing is stored.</span>
                 </>
               )}
             </div>
@@ -153,7 +158,7 @@ function Verify() {
 
           {!result && !error && (
             <p className="m-0 text-[14px] text-grey">
-              Every render made through Likeness has a receipt on HSK Chain keyed by the file&apos;s sha256, anchored only after its HSP payment was recorded.
+              Every render made through Likeness has a receipt on {chain} keyed by the file&apos;s sha256, anchored only after its HSP payment was recorded.
               Edited or re-encoded copies come back Unknown.
             </p>
           )}
@@ -168,7 +173,7 @@ function Verify() {
                     <span className="truncate">{who?.name ?? "Creator"}</span>
                   </Link>
                   <span className="text-[12px] text-grey">
-                    <Addr a={result!.creator!} />
+                    <Addr explorer={result!.explorer} a={result!.creator!} />
                     {who ? ` · ${who.label.toLowerCase()}` : ""}
                   </span>
                 </div>
@@ -176,7 +181,7 @@ function Verify() {
                   <span className="text-[13px] text-grey">Licensee</span>
                   <span className="text-[14px] font-semibold">Brand agent</span>
                   <span className="text-[12px] text-grey">
-                    <Addr a={result!.licensee!} />
+                    <Addr explorer={result!.explorer} a={result!.licensee!} />
                   </span>
                 </div>
                 <div className="flex min-w-0 flex-col gap-1.5 rounded-[18px] bg-white p-4">
@@ -207,7 +212,7 @@ function Verify() {
                   </p>
                   <p className="m-0 mt-1 text-grey">&ldquo;{result!.bundle.brief}&rdquo;</p>
                   <p className="m-0 mt-1 text-[13px] text-grey">
-                    One licence per media type on HSK Chain:{" "}
+                    One licence per media type on {chain}:{" "}
                     {[result!.bundle.imageLicence && `images #${result!.bundle.imageLicence}`, result!.bundle.videoLicence && `videos #${result!.bundle.videoLicence}`].filter(Boolean).join(", ")}
                     . This file is {result!.bundle.kind === "video" ? "a video" : "an image"} under #{result!.licenceId}.
                   </p>
@@ -222,7 +227,7 @@ function Verify() {
                   </div>
                   <div>
                     <dt className="text-grey">Paid</dt>
-                    <dd className="m-0 mt-0.5 font-semibold">{result!.paid} USDT through HSP</dd>
+                    <dd className="m-0 mt-0.5 font-semibold">{result!.paid} {result!.tokenSymbol ?? state?.token ?? "USDT"} through HSP</dd>
                   </div>
                   <div>
                     <dt className="text-grey">Receipt anchored</dt>
@@ -232,9 +237,9 @@ function Verify() {
               </section>
 
               <ul className="on-dark m-0 grid list-none grid-cols-1 gap-x-5 gap-y-3 rounded-[18px] bg-ink p-[18px] text-[14px] text-white sm:grid-cols-2">
-                <Check ok>Receipt on HSK Chain {result!.anchorTx && <Tx hash={result!.anchorTx} label="view tx" />}</Check>
-                <Check ok>HSP payment executed {result!.hspTxHash && <Tx hash={result!.hspTxHash} label="view tx" />}</Check>
-                <Check ok={!!result!.recordTx}>Recorded by the creator&apos;s agent {result!.recordTx && <Tx hash={result!.recordTx} label="view tx" />}</Check>
+                <Check ok>Receipt on {chain} {result!.anchorTx && <Tx explorer={result!.explorer} hash={result!.anchorTx} label="view tx" />}</Check>
+                <Check ok>HSP payment executed {result!.hspTxHash && <Tx explorer={result!.explorer} hash={result!.hspTxHash} label="view tx" />}</Check>
+                <Check ok={!!result!.recordTx}>Recorded by the creator&apos;s agent {result!.recordTx && <Tx explorer={result!.explorer} hash={result!.recordTx} label="view tx" />}</Check>
                 <Check ok={result!.licenceStatus === "Active"}>{result!.licenceStatus === "Active" ? "Licence still in force" : `Licence ${result!.licenceStatus?.toLowerCase()}`}</Check>
               </ul>
               <p className="m-0 text-[13px] text-grey">
@@ -252,7 +257,7 @@ function Verify() {
 function subline(v: Verdict): string {
   switch (v.verdict) {
     case "Licensed":
-      return "Made under a licence that is still in force: approved within the creator's terms, paid through HSP and recorded on HSK Chain.";
+      return "Made under a licence that is still in force: approved within the creator's terms, paid through HSP and recorded on chain.";
     case "Revoked":
       return "Licensed when it was made. The creator revoked the licence afterwards, so it should not be used in new placements.";
     case "Expired":

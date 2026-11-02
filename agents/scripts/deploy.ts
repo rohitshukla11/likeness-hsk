@@ -21,7 +21,7 @@ import { existsSync } from "node:fs";
 const args = process.argv.slice(2);
 const network = (args[args.indexOf("--network") + 1] ?? "") as NetworkName;
 const broadcast = args.includes("--broadcast");
-if (!(network in NETWORKS)) throw new Error("--network testnet|mainnet");
+if (!(network in NETWORKS)) throw new Error("--network testnet|sepolia|mainnet");
 if (network === "mainnet" && broadcast && process.env.LIKENESS_MAINNET_DEPLOY !== "yes") {
   throw new Error("mainnet broadcast refused: needs LIKENESS_MAINNET_DEPLOY=yes (only on Rohit's \"deploy\")");
 }
@@ -129,7 +129,106 @@ async function redeployForHsp(): Promise<never> {
   console.log(`wrote ${deploymentsDir(root)}/${network}.json; next: pnpm run safe -- --network ${network} (dry run, then --broadcast) and pnpm run verify -- --network ${network}`);
   process.exit(0);
 }
+/**
+ * Ethereum Sepolia (the organisers allow it during the hackathon, 2 Nov 2026): all four contracts on the
+ * EIP-3009 rail for the token HSP QA lists there (Circle's USDC), the attester given in ATTESTER (the public
+ * server's), render agents in RENDER_AGENTS. HSK testnet stays as the previous deployment (Verify falls back
+ * to it, on its own chain); nothing on HSK is touched.
+ */
+async function deploySepolia(): Promise<never> {
+  const cfgFile = `${root}deployments/hsp-qa-chain-config.json`;
+  if (!existsSync(cfgFile)) throw new Error("needs deployments/hsp-qa-chain-config.json (HSP QA's get_chain_config)");
+  const opt = chooseOption(JSON.parse(readFileSync(cfgFile, "utf8")), { chainId: net.chainId, token: process.env.HSP_TOKEN });
+  if (opt.token.protocol !== "eip3009") throw new Error(`HSP lists ${opt.token.symbol} on Sepolia as ${opt.token.protocol}; this deploy is for the EIP-3009 rail`);
+  const att = (process.env.ATTESTER ?? attester) as Address;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(att)) throw new Error("ATTESTER must be a 0x address");
+  const gasPrice = await pub.getGasPrice();
+  console.log(`network sepolia (chain ${net.chainId}), deployer/owner ${owner}, balance ${formatEther(await pub.getBalance({ address: owner }))} ETH, gas price ${Number(gasPrice) / 1e9} gwei`);
+  console.log(`token ${opt.token.symbol} ${opt.token.address} (${opt.token.decimals} decimals, eip3009, EIP-712 "${opt.token.name}" version ${opt.token.version}); attester ${att}; render agents ${renderAgents.join(", ")}`);
+  const hsk = JSON.parse(readFileSync(`${deploymentsDir(root)}/testnet.json`, "utf8"));
+  if (!broadcast) {
+    // The same bytecode's gas on HSK testnet (an unfunded account's estimates on Sepolia aren't reliable).
+    const hskPub = createPublicClient({ transport: http(hsk.rpcUrl) });
+    const used = async (tx?: Hex) => (tx ? (await hskPub.getTransactionReceipt({ hash: tx })).gasUsed : 0n);
+    const t = hsk.txs ?? {};
+    const rows: [string, bigint][] = [
+      ["CreatorRegistry", await used(t.CreatorRegistry)],
+      ["LicenseRegistry", await used(t.LicenseRegistry)],
+      ["ReceiptAnchor", await used(t.ReceiptAnchor)],
+      ["HspSettlement", await used(t.HspSettlement)],
+      ["setSettlement ×2", (await used(t["setSettlement(L)"])) + (await used(t["setSettlement(R)"]))],
+      [`setRenderAgent ×${renderAgents.length}`, BigInt(renderAgents.length) * ((await used(t.setRenderAgent ?? t["setRenderAgent(1)"])) || 50_000n)],
+    ];
+    let gas = 0n;
+    for (const [n, g] of rows) {
+      console.log(`  ${n.padEnd(18)} ${g} gas (as used on HSK testnet)`);
+      gas += g;
+    }
+    for (const gwei of [Number(gasPrice) / 1e9, 2, 10]) console.log(`total ${gas} gas ≈ ${formatEther(gas * BigInt(Math.ceil(gwei * 1e9)))} ETH at ${gwei} gwei`);
+    console.log("Dry run: nothing sent.");
+    process.exit(0);
+  }
+  const txs: Record<string, Hex> = {};
+  const deploy = async (name: string, ctorArgs: unknown[]) => {
+    const { abi, bytecode } = artifact(name);
+    const hash = await wallet.deployContract({ abi, bytecode, args: ctorArgs as never });
+    const r = await pub.waitForTransactionReceipt({ hash });
+    if (r.status !== "success" || !r.contractAddress) throw new Error(`${name} deploy failed: ${hash}`);
+    txs[name] = hash;
+    console.log(`${name.padEnd(16)} ${r.contractAddress}  ${net.explorer}/tx/${hash}`);
+    return { address: r.contractAddress, block: r.blockNumber };
+  };
+  const call = async (label: string, address: Address, name: string, fn: string, fnArgs: unknown[]) => {
+    const hash = await wallet.writeContract({ address, abi: artifact(name).abi, functionName: fn, args: fnArgs as never });
+    const r = await pub.waitForTransactionReceipt({ hash });
+    if (r.status !== "success") throw new Error(`${label} failed: ${hash}`);
+    txs[label] = hash;
+    console.log(`${label.padEnd(16)} ${net.explorer}/tx/${hash}`);
+  };
+  const creators = await deploy("CreatorRegistry", [owner, att]);
+  const licences = await deploy("LicenseRegistry", [owner, creators.address]);
+  const receipts = await deploy("ReceiptAnchor", [owner]);
+  const settlement = await deploy("HspSettlement", [owner, 0, opt.token.address, ZERO, licences.address, receipts.address]);
+  await call("setSettlement(L)", licences.address, "LicenseRegistry", "setSettlement", [settlement.address]);
+  await call("setSettlement(R)", receipts.address, "ReceiptAnchor", "setSettlement", [settlement.address]);
+  for (const [i, a] of renderAgents.entries()) await call(`setRenderAgent${renderAgents.length > 1 ? `(${i + 1})` : ""}`, settlement.address, "HspSettlement", "setRenderAgent", [a, true]);
+  // HSK testnet (and what it replaced) stays readable for Verify, each on its own chain.
+  const onHsk = (p: Record<string, unknown>) => ({ chainId: hsk.chainId, rpcUrl: hsk.rpcUrl, explorer: hsk.explorer, creators: hsk.creators, ...p });
+  const previous = [
+    onHsk({ licences: hsk.licences, receipts: hsk.receipts, settlement: hsk.settlement, token: hsk.token, tokenSymbol: hsk.tokenSymbol, rail: hsk.rail, startBlock: hsk.startBlock }),
+    ...((hsk.previousDeployments ?? []) as Record<string, unknown>[]).map(onHsk),
+  ];
+  const out = {
+    network: "sepolia",
+    chainId: net.chainId,
+    rpcUrl: net.rpcUrl,
+    explorer: net.explorer,
+    hspNetwork: opt.network,
+    deployedAt: new Date().toISOString(),
+    startBlock: Number(creators.block),
+    owner,
+    attester: att,
+    renderAgents,
+    rail: "eip3009",
+    token: opt.token.address,
+    tokenSymbol: opt.token.symbol,
+    tokenName: opt.token.name,
+    tokenVersion: opt.token.version,
+    testToken: false,
+    creators: creators.address,
+    licences: licences.address,
+    receipts: receipts.address,
+    settlement: settlement.address,
+    txs,
+    previousDeployments: previous,
+  };
+  writeFileSync(`${deploymentsDir(root)}/sepolia.json`, `${JSON.stringify(out, null, 2)}\n`);
+  console.log(`wrote ${deploymentsDir(root)}/sepolia.json; next: pnpm run safe -- --network sepolia (dry run, then --broadcast)`);
+  process.exit(0);
+}
+
 const ZERO = "0x0000000000000000000000000000000000000000" as Address;
+if (network === "sepolia") await deploySepolia();
 if (args.includes("--hsp-token")) await redeployForHsp();
 const plan: { name: string; args: unknown[] }[] = [
   { name: "CreatorRegistry", args: [owner, attester] },

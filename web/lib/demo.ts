@@ -11,7 +11,7 @@ export const DEMO_CREATOR = {
   label: "Synthetic demo creator",
   photo: "/demo/ana-reyes.svg",
   region: "Worldwide",
-  bio: "A synthetic demo creator: her face is an illustration; her terms, licences and payments are real on HSK Chain testnet.",
+  bio: "A synthetic demo creator: her face is an illustration; her terms, licences and payments are real, on chain (testnet).",
 } as const;
 
 /** CreatorRegistry category bits (8 and up), as in contracts/src/Categories.sol. */
@@ -27,7 +27,7 @@ export function displayOf(c: CreatorView) {
     label: c.label ? `Verified YouTube creator · ${c.label}` : "Verified YouTube creator",
     photo: c.photo ?? "",
     region: "Worldwide",
-    bio: `A real creator, signed in with Google; YouTube channel ${c.youtube?.title ?? ""} verified by Likeness. Their terms, licences and payments are on HSK Chain testnet.`,
+    bio: `A real creator, signed in with Google; YouTube channel ${c.youtube?.title ?? ""} verified by Likeness. Their terms, licences and payments are on chain (testnet).`,
     verified: true,
   };
 }

@@ -13,6 +13,7 @@ import { RenderCard } from "@/components/dashboard/RenderCard";
 import { Addr, StatusBadge, Tx } from "@/components/ui";
 import { api, usd, type BundleView, type Payment, type RenderView } from "@/lib/api";
 import { DEMO_CREATOR } from "@/lib/demo";
+import { chainLabel } from "@/lib/chain";
 
 export function CreatorDashboard() {
   const { state } = useAppState();
@@ -58,7 +59,7 @@ export function CreatorDashboard() {
   const shown = bundles ? (showEarlier ? bundles : bundles.slice(0, 3)) : [];
   const received = (payments ?? []).reduce((s, p) => s + Number(p.amount), 0);
   return (
-    <AppPage title={`${name}'s dashboard`} description={`Who licensed ${mine ? "your" : "her"} likeness, what they paid, and a one-click revoke. Read from HSK Chain.`}>
+    <AppPage title={`${name}'s dashboard`} description={`Who licensed ${mine ? "your" : "her"} likeness, what they paid, and a one-click revoke. Read from ${chainLabel(state?.chainId)}.`}>
       <div className="grid grid-cols-1 gap-[14px] sm:grid-cols-3">
         <Card tone="lime">
           <span className="text-[13px]">Received</span>
@@ -102,7 +103,7 @@ export function CreatorDashboard() {
 
       <Card title={mine ? "Licence bundles of your likeness" : "Licence bundles of her likeness"}>
         {!bundles ? (
-          <span className="text-[14px] text-grey">Reading HSK Chain…</span>
+          <span className="text-[14px] text-grey">Reading the chain…</span>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {shown.map((b) => (
@@ -167,7 +168,7 @@ export function CreatorDashboard() {
           brand&apos;s authorization had executed.
         </p>
         {!payments?.length ? (
-          <span className="text-[14px] text-grey">{payments ? "None yet." : "Reading HSK Chain…"}</span>
+          <span className="text-[14px] text-grey">{payments ? "None yet." : "Reading the chain…"}</span>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[13px]">

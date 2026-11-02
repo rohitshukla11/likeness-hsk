@@ -10,6 +10,8 @@ import { btnClass, Card, StatusPill } from "@/components/ds";
 import { IconCheck } from "@/components/ds/icons";
 import { Tx } from "@/components/ui";
 import { HSP_STATES, rawToDecimal, type Approval, type JobView, type LogEvent } from "@/lib/api";
+import { hspLabel } from "@/lib/chain";
+import { useAppState } from "@/components/site/AppState";
 import { AGENTIC_STEPS } from "@/lib/steps";
 
 export function ApprovalPanel({ a, onDecide, busy }: { a: Approval; onDecide: (id: string, approve: boolean) => void; busy: boolean }) {
@@ -56,8 +58,9 @@ export function HspStatusList({ view }: { view: JobView }) {
   const seen = new Set(view.statuses.map((s) => s.status));
   const furthest = Math.max(-1, ...HSP_STATES.map((st, i) => (seen.has(st) ? i : -1)));
   const failed = view.statuses.find((s) => s.status === "payment-failed");
+  const { state } = useAppState();
   return (
-    <Card title="HSP payment status" action={view.attribution === true ? <StatusPill kind="licensed">attribution verified</StatusPill> : view.attribution === false ? <StatusPill kind="revoked">attribution NOT verified</StatusPill> : undefined}>
+    <Card title={<span className="flex flex-wrap items-center gap-2">HSP payment status <span className="rounded-full bg-paper px-2 py-0.5 text-[12px] font-semibold text-grey">{hspLabel(state?.gateway, state?.chainId)}</span></span>} action={view.attribution === true ? <StatusPill kind="licensed">attribution verified</StatusPill> : view.attribution === false ? <StatusPill kind="revoked">attribution NOT verified</StatusPill> : undefined}>
       <ol className="m-0 flex list-none flex-wrap gap-2 p-0">
         {HSP_STATES.map((st, i) => (
           <li key={st} title={i < furthest && !seen.has(st) ? "passed between two polls" : undefined}>

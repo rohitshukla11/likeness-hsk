@@ -17,6 +17,7 @@ import { RenderCard } from "@/components/dashboard/RenderCard";
 import { inputClass } from "@/components/ui";
 import { api, downloadAsBrand, END_STATES, fetchRenderAsBrand, fmtBytes, usd, type BundleView, type CreatorView, type JobView, type LogEvent, type Payment, type RenderView } from "@/lib/api";
 import { displayOf } from "@/lib/demo";
+import { chainLabel } from "@/lib/chain";
 
 export function BrandConsole() {
   return (
@@ -172,7 +173,7 @@ function Brand() {
             action={<span className="text-[13px] text-grey">{isBrand ? "taken by this account" : `the shared agent wallet's${totalBytes !== null ? ` · renders on disk ${fmtBytes(totalBytes)}` : ""}`}</span>}
           >
             {bundles === null ? (
-              <span className="text-[14px] text-grey">Reading HSK Chain…</span>
+              <span className="text-[14px] text-grey">Reading the chain…</span>
             ) : bundles.length === 0 ? (
               <EmptyState title="No licences yet">Request a bundle on a creator&apos;s profile: one brief, a number of images and videos.</EmptyState>
             ) : (
@@ -272,7 +273,7 @@ function Brand() {
 
           <Card title="Payments made">
             {!payments?.length ? (
-              <span className="text-[14px] text-grey">{payments ? "No payments yet." : "Reading HSK Chain…"}</span>
+              <span className="text-[14px] text-grey">{payments ? "No payments yet." : "Reading the chain…"}</span>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-[13px]">
@@ -314,7 +315,7 @@ function Brand() {
           {!view ? (
             <EmptyState title="This render, step by step">
               Pay for a render to see each step: the A2A request, the HSP order, your policy check, the quote, approval 1, the signature, approval 2, the
-              submission, HSP&apos;s status, the record on HSK Chain and the receipt.
+              submission, HSP&apos;s status, the record on chain and the receipt.
             </EmptyState>
           ) : (
             <>
@@ -326,9 +327,9 @@ function Brand() {
                   : j?.state === "submitted"
                     ? "Submitted to HSP. Following its status…"
                     : j?.state === "recorded"
-                      ? "Paid and recorded on HSK Chain. Rendering…"
+                      ? `Paid and recorded on ${chainLabel(state?.chainId)}. Rendering…`
                       : j?.state === "generating"
-                        ? `Paid and recorded on HSK Chain. Generating your ${j.kind === "video" ? "video" : "image"} ad: ${j.progress ?? "starting"}…`
+                        ? `Paid and recorded on ${chainLabel(state?.chainId)}. Generating your ${j.kind === "video" ? "video" : "image"} ad: ${j.progress ?? "starting"}…`
                       : j?.state === "refused"
                         ? j.error
                         : j?.state === "failed"

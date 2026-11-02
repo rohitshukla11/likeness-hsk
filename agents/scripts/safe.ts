@@ -49,7 +49,7 @@ const args = process.argv.slice(2);
 const opt = (k: string) => (args.includes(`--${k}`) ? args[args.indexOf(`--${k}`) + 1] : undefined);
 const network = opt("network") ?? "";
 const broadcast = args.includes("--broadcast");
-if (network !== "testnet" && network !== "mainnet") throw new Error("--network testnet|mainnet");
+if (network !== "testnet" && network !== "mainnet" && network !== "sepolia") throw new Error("--network testnet|sepolia|mainnet");
 if (network === "mainnet" && broadcast && process.env.LIKENESS_MAINNET_DEPLOY !== "yes") {
   throw new Error("mainnet refused: needs LIKENESS_MAINNET_DEPLOY=yes (only on Rohit's \"deploy\")");
 }

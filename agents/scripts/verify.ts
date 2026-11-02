@@ -15,9 +15,11 @@ import { foundryBin } from "../src/dev/foundry.js";
 
 const args = process.argv.slice(2);
 const network = args[args.indexOf("--network") + 1];
-if (network !== "testnet" && network !== "mainnet") throw new Error("--network testnet|mainnet");
+if (network !== "testnet" && network !== "mainnet" && network !== "sepolia") throw new Error("--network testnet|sepolia|mainnet");
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const dep = JSON.parse(readFileSync(`${root}deployments/${network}.json`, "utf8"));
+// Sepolia's explorer link is Etherscan; its source is verified on Blockscout's Sepolia instance (no API key).
+if (network === "sepolia") dep.explorer = "https://eth-sepolia.blockscout.com";
 const forge = foundryBin("forge");
 const COMPILER = "v0.8.30+commit.73712a01";
 const contracts: [string, string, string][] = [

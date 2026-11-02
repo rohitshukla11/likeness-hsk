@@ -16,6 +16,6 @@ export const AGENTIC_STEPS: Step[] = [
   { id: "approve-submit", title: "You approved submitting", who: "approval 2", match: (e) => e.kind === "approval" && /submission approved/.test(e.summary) },
   { id: "submitted", title: "Submitted to HSP", who: "HSP finalize_payment, then submit_payment", match: (e) => e.kind === "hsp.response" && /^submitted/.test(e.summary) },
   { id: "status", title: "HSP status", who: "query_payment until safe or finalized", match: (e) => e.kind === "hsp.status", tx: (e) => e.data?.payment?.tx_signature, last: true },
-  { id: "recorded", title: "Recorded on HSK Chain", who: "creator agent → HspSettlement.recordPayment", match: (e) => e.kind === "tx" && /recordPayment/.test(e.summary), tx: (e) => e.data?.tx },
+  { id: "recorded", title: "Recorded on chain", who: "creator agent → HspSettlement.recordPayment", match: (e) => e.kind === "tx" && /recordPayment/.test(e.summary), tx: (e) => e.data?.tx },
   { id: "receipt", title: "Receipt anchored", who: "render agent → ReceiptAnchor, keyed by the file's sha256", match: (e) => e.kind === "tx" && /receipt anchored/.test(e.summary), tx: (e) => e.data?.tx },
 ];

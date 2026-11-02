@@ -1,0 +1,51 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+  "explorer": "https://sepolia.etherscan.io",
+  "hspNetwork": "sepolia",
+  "deployedAt": "2026-11-02T12:59:02.458Z",
+  "startBlock": 12048291,
+  "owner": "0x80Bc5b9E582ebB58031FDbCA9C015c8e9EE85AA7",
+  "attester": "0xCaCd400524Cb87f182105A929548b2E30edd6B8f",
+  "renderAgents": [
+    "0x211b4FC6f1aC695173Dc217044b26380a78E783F",
+    "0xd266CB9Edc93E722655Dc435B375e72Afa183586"
+  ],
+  "rail": "eip3009",
+  "token": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+  "tokenSymbol": "USDC",
+  "tokenName": "USDC",
+  "tokenVersion": "2",
+  "testToken": false,
+  "creators": "0x1d24e01ed42bb3305dd4b5c50e98c8e29c573440",
+  "licences": "0x802be473735a65ef4404f78d1b432bcd926d4382",
+  "receipts": "0xc1ca72b4fd33ab4af744ae110d47300849437680",
+  "settlement": "0x4e6c1540787e2db272733c13dc4f9e61adbbb719",
+  "txs": {
+    "CreatorRegistry": "0xcfd95db9e0591b4a64b12ef8b80e4c3880974841c99841acc7d1e6f4b2b5ff1b",
+    "LicenseRegistry": "0xf2596d6ab5b81c408831db7caeaa991710c11e07ef2d600697c562946a54da1e",
+    "ReceiptAnchor": "0x4dfdab3b4938a5060d9f3cf355bf4b6e1746608f618dee54beafff8e47cb39a4",
+    "HspSettlement": "0x1751e0c29c18ed509d6a27dc7c28fbcd1ab41cb3366799b4790f7407b61238d4",
+    "setSettlement(L)": "0x66c7cfa97d6a5448266607cdc806a2108e9970325dbd85289e80140a6edb140b",
+    "setSettlement(R)": "0xb54106f68ad4520f850de339e6486300dae90e5ff967bac335fa191bf8e01335",
+    "setRenderAgent(1)": "0x4ab05794d89365cec616b26a22bc3bc5838fc19c24b05820ff91f925d1ef9bec",
+    "setRenderAgent(2)": "0x6df433bc3058f4511eb269905626cbb2d64da77f3b2b79a5d02d3d255730b84e"
+  },
+  "previousDeployments": [
+    {
+      "chainId": 133,
+      "rpcUrl": "https://testnet.hsk.xyz",
+      "explorer": "https://testnet-explorer.hskchain.net",
+      "creators": "0x388cd6c6ee71aed1d052894b6981fdb9c7aad6be",
+      "licences": "0x91e2df3ec2188812eb026ce101af4e772a43aff4",
+      "receipts": "0x9da3a94fc7924be25e573bafaf5ef33d2749e4c1",
+      "settlement": "0x4a2bafa2279ea1b0ca67fb8d149eebbc890bf869",
+      "token": "0xc0336d73fde52b1c8463b7f746da33e71102fcea",
+      "tokenSymbol": "USDT",
+      "rail": "permit2",
+      "startBlock": 34998210
+    }
+  ],
+  "safe": "0xA2562317E5452E27fa83fEc4415EcBB3EB4b34e4"
+}

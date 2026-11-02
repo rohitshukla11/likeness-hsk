@@ -17,7 +17,7 @@ import { chooseOption } from "../hsp/agentic/chainConfig.js";
 import { type HspAgentic, MERCHANT_NAME } from "../hsp/agentic/client.js";
 import { type Approval, PaymentCancelled, payWithHsp, watchPayment } from "../hsp/agentic/payer.js";
 
-export const LIVE_QA_LABEL = "Live HashKey QA payment on Ethereum Sepolia; not recorded by our HSK contracts";
+export const LIVE_QA_LABEL = "Live HashKey QA payment on Ethereum Sepolia; a test payment, not a render, not recorded by our contracts";
 export const SEPOLIA = 11155111;
 /** Circle's USDC on Ethereum Sepolia, as HSP QA's get_chain_config lists it (eip3009, EIP-712 "USDC" version "2"). */
 export const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as Address;

@@ -492,6 +492,10 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
     const verdict = status === "Revoked" ? "Revoked" : status === "Expired" ? "Expired" : "Licensed";
     return json(res, 200, {
       verdict,
+      // Where the receipt was found (Sepolia now, HSK testnet for files made before the move), for labels and links.
+      chainId: ch.d.chainId,
+      explorer: ch.d.explorer ?? null,
+      tokenSymbol: ch.d.tokenSymbol,
       licenceStatus: status,
       licenceId: r.licenceId.toString(),
       renderIndex: r.renderIndex,

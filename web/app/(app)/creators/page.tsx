@@ -7,6 +7,7 @@ import { CreatorCard } from "@/components/market/CreatorCard";
 import { useAppState } from "@/components/site/AppState";
 import { api, type CreatorView } from "@/lib/api";
 import { categoriesOf, displayOf } from "@/lib/demo";
+import { chainLabel } from "@/lib/chain";
 
 export default function CreatorsPage() {
   const { state } = useAppState();
@@ -15,7 +16,7 @@ export default function CreatorsPage() {
     api<CreatorView[]>("/api/creators").then(setList, () => setList([]));
   }, []);
   return (
-    <AppPage title="Creators" description="Their terms live on HSK Chain; a brand's agent licenses them from the creator's own agent.">
+    <AppPage title="Creators" description={`Their terms live on ${chainLabel(state?.chainId)}; a brand's agent licenses them from the creator's own agent.`}>
       <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
         {list ? (
           // Real creators first, then the synthetic demo creator.
