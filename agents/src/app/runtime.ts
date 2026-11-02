@@ -407,6 +407,8 @@ const licenceIssued = parseAbiItem(
 
 /** HSK testnet's RPC answers eth_getLogs for ranges under ~5,000 blocks. */
 const LOG_CHUNK = 4_000n;
+/** Blocks behind the reported head that log reads stop at (a lagging node may not have the newest ones yet). */
+const HEAD_MARGIN = 2n;
 
 /**
  * One event's logs since the deployment's start block: scanned once in chunks the RPC accepts, then only
@@ -426,14 +428,41 @@ class LogCache<T> {
   }
 
   private async catchUp() {
+    // A load-balanced RPC (Sepolia's public one) may serve eth_getLogs from a node a block or two behind the
+    // one that gave the head, and refuse a range past its own head. A refused range is tried again, then up to
+    // a few blocks short of the head (the rest is read on the next call); if it's still refused, the logs read
+    // so far are returned and the scan resumes next time.
     const latest = await this.latest();
     while (this.next <= latest) {
       const ranges: [bigint, bigint][] = [];
       for (let f = this.next; f <= latest && ranges.length < 6; f += LOG_CHUNK) ranges.push([f, f + LOG_CHUNK - 1n < latest ? f + LOG_CHUNK - 1n : latest]);
-      for (const got of await Promise.all(ranges.map(([a, b]) => this.fetch(a, b)))) this.logs.push(...got);
-      this.next = ranges.at(-1)![1] + 1n;
+      let got: [T[], bigint][];
+      try {
+        got = await Promise.all(ranges.map(([a, b]) => this.upTo(a, b)));
+      } catch {
+        return this.logs;
+      }
+      for (const [g] of got) this.logs.push(...g);
+      const [, to] = got.at(-1)!;
+      this.next = to + 1n;
+      if (to < ranges.at(-1)![1]) break; // stopped short of a lagging node's head: the rest next time
     }
     return this.logs;
+  }
+
+  /** Logs from a to b; if refused, once more, then ending HEAD_MARGIN and 2×HEAD_MARGIN blocks earlier. */
+  private async upTo(a: bigint, b: bigint): Promise<[T[], bigint]> {
+    let last: unknown;
+    for (const back of [0n, 0n, HEAD_MARGIN, 2n * HEAD_MARGIN]) {
+      if (b - back < a) break;
+      try {
+        return [await this.fetch(a, b - back), b - back];
+      } catch (e) {
+        last = e;
+        await new Promise((r) => setTimeout(r, 750));
+      }
+    }
+    throw last;
   }
 }
 
