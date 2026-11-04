@@ -14,6 +14,11 @@ vmssh() { gcloud compute ssh likeness-hsk-vm --zone=us-central1-a --project=like
 
 ## Before T−60: the dedicated RPC (optional, Rohit)
 
+**Done, 4 Nov 06:05 UTC:** an Infura key is in the `likeness-rpc-url` secret (tested first: 4,000-block
+`eth_getLogs` ranges answer), the backend restarted once (the freeze's one restart), and `/api/state` shows
+`"rpc":"dedicated"`. Alchemy's free tier was tried and refused: `eth_getLogs` is limited to 10 blocks there. Rotate
+both keys after the demo (they were pasted in a chat). The steps below are for reference.
+
 Sepolia's public RPC (publicnode) is load-balanced and has lagged before. A dedicated free key avoids that.
 **Provider: Infura** (MetaMask Developer, free tier): no `eth_getLogs` block-range limit (only 10,000 results per
 call), which our 4,000-block log scan needs. Alchemy's free tier limits `eth_getLogs` to a handful of blocks, which
