@@ -12,7 +12,7 @@ import { Addr, Field, inputClass, Tx } from "@/components/ui";
 import { api, idTokenHeader, type Me, type Role } from "@/lib/api";
 import { CATEGORY_LABELS } from "@/lib/demo";
 import { youtubeAccessToken } from "@/lib/firebase";
-import { chainLabel } from "@/lib/chain";
+import { chainLabel, tokenOf } from "@/lib/chain";
 import { useAppState } from "@/components/site/AppState";
 
 export function ChooseRole({ onDone }: { onDone: () => Promise<unknown> }) {
@@ -247,7 +247,7 @@ function TermsForm({ address, ready, busy, onSubmit }: { address: string; ready:
           <select className={inputClass} value={price} onChange={(e) => setPrice(e.target.value)}>
             {PRICES.map((p) => (
               <option key={p} value={p}>
-                {p} {state?.token ?? "USDT"} (testnet)
+                {p} {tokenOf(state)} (testnet)
               </option>
             ))}
           </select>

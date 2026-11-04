@@ -13,7 +13,7 @@ export type CardCreator = {
   label: string;
   photo: string;
   region: string;
-  price: string; // "0.05 USDT"
+  price: string; // "0.05 USDC"
   uses: string[];
   autoApprove: boolean;
 };

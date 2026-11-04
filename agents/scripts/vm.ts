@@ -257,6 +257,45 @@ deployer     ${deployer.address}: ${formatEther(await pub.getBalance({ address: 
   console.log(`\nFor Rohit to run (the VM brand approves Permit2 for 5 test USDT; the password is read from the file):
 cast send ${dep.token} "approve(address,uint256)" ${dep.permit2} 5000000 \\
   --keystore .secrets/vm/keystores/brand --password-file .secrets/vm/keystore-password --rpc-url ${dep.rpcUrl}`);
+} else if (args[0] === "sepolia-gas") {
+  // Ethereum Sepolia: gas (test ETH) from the deployer for the wallets that send during a demo: the VM's creator
+  // agent (records each payment), its render agent (anchors each receipt) and any creator wallet given (revokes
+  // are signed by the creator's own custodial wallet). Each is topped up to 0.03 ETH when below 0.02.
+  // Dry run without --broadcast.
+  const broadcast = args.includes("--broadcast");
+  const extra = args.slice(1).filter((a) => /^0x[0-9a-fA-F]{40}$/.test(a)) as Address[];
+  const dep = JSON.parse(readFileSync(`${deploymentsDir(root)}/sepolia.json`, "utf8"));
+  if (dep.chainId !== 11155111) throw new Error("Ethereum Sepolia (chain 11155111) only");
+  const rpcUrl = process.env.SEPOLIA_RPC_URL ?? dep.rpcUrl;
+  const chain = chainOf({ chainId: dep.chainId, rpcUrl, explorer: dep.explorer } as Deployment);
+  const pub = createPublicClient({ chain, transport: http(rpcUrl) });
+  const vmPw = readFileSync(`${dir}/keystore-password`, "utf8").trimEnd();
+  const vm = (n: string) => loadAccount(`${dir}/keystores/${n}`, vmPw).address;
+  const deployer = loadAccount(`${root}.secrets/keystores/deployer`, keychainPassword());
+  const targets: [string, Address][] = [["creator agent", vm("creator-agent")], ["render agent", vm("render-agent")], ...extra.map((a) => ["creator wallet", a] as [string, Address])];
+  const TARGET = parseEther("0.03");
+  const BELOW = parseEther("0.02");
+  console.log(`deployer        ${deployer.address}: ${formatEther(await pub.getBalance({ address: deployer.address }))} ETH`);
+  for (const [n, a] of [["brand (info)", vm("brand")], ["executor (info)", vm("executor")]] as [string, Address][]) console.log(`${n.padEnd(15)} ${a}: ${formatEther(await pub.getBalance({ address: a }))} ETH`);
+  const sends: [string, Address, bigint][] = [];
+  for (const [n, a] of targets) {
+    const has = await pub.getBalance({ address: a });
+    const plan = has < BELOW ? TARGET - has : 0n;
+    console.log(`${n.padEnd(15)} ${a}: ${formatEther(has)} ETH${plan ? `, +${formatEther(plan)}` : ", enough"}`);
+    if (plan) sends.push([n, a, plan]);
+  }
+  if (!sends.length) console.log("nothing to send");
+  else if (!broadcast) console.log(`\n(dry run: ${formatEther(sends.reduce((s, x) => s + x[2], 0n))} ETH in ${sends.length} transfers; add --broadcast to send)`);
+  else {
+    const w = createWalletClient({ account: deployer, chain, transport: http(rpcUrl) });
+    // Nonces counted here: a lagging node of a load-balanced RPC can report the count from before the last send.
+    let nonce = await pub.getTransactionCount({ address: deployer.address, blockTag: "pending" });
+    for (const [n, a, value] of sends) {
+      const hash = await w.sendTransaction({ to: a, value, nonce: nonce++ });
+      if ((await pub.waitForTransactionReceipt({ hash })).status !== "success") throw new Error(`${n}: transfer failed: ${dep.explorer}/tx/${hash}`);
+      console.log(`${n.padEnd(15)} +${formatEther(value)} ETH ${dep.explorer}/tx/${hash}`);
+    }
+  }
 } else {
-  throw new Error("pnpm run vm -- keys | setup [--broadcast] | attester [--broadcast] | topup [--broadcast]");
+  throw new Error("pnpm run vm -- keys | setup [--broadcast] | attester [--broadcast] | topup [--broadcast] | sepolia-gas [0xCreator…] [--broadcast]");
 }

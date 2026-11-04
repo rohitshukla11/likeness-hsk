@@ -245,6 +245,26 @@ describe("the public server: demo password, rate limits, daily cap (local devnet
     expect((await again.json()).error).toMatch(/cap/);
   });
 
+  it("demo prep (admin only) raises today's limits, the next payment goes through; restore brings the cap back", async () => {
+    expect((await fetch(`${base}/api/admin/demo-prep`)).status).toBe(401);
+    const v = await (await post("/api/admin/demo-prep", { action: "raise" })).json();
+    expect(v).toMatchObject({ active: true, limits: { brand: { image: 10, video: 4 }, site: { image: 20, video: 6 }, paidRenders: 26, dailyBudget: "2000000" }, normal: { paidRenders: 1, dailyBudget: "1000000" } });
+    expect(v.until).toBe(new Date(Date.parse(`${v.day}T00:00:00Z`) + 86_400_000).toISOString());
+    const s = await (await get("/api/state")).json();
+    expect(s).toMatchObject({ cap: { max: 26 }, policy: { dailyBudget: "2.00" }, ads: { brandCaps: { image: 10, video: 4 }, siteCaps: { image: 20, video: 6 } }, demoPrep: { active: true } });
+    const { licenceId } = await (await post("/api/brand/license", { renderCap: 3 })).json();
+    const pay = await post("/api/brand/pay", { licenceId });
+    expect(pay.status).toBe(200);
+    const { jobId } = await pay.json();
+    for (;;) {
+      const r = await (await get(`/api/brand/job?id=${jobId}`)).json();
+      if (["delivered", "paid-not-recorded", "refused", "failed"].includes(r.job.state)) break;
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    expect((await (await post("/api/admin/demo-prep", { action: "restore" })).json()).active).toBe(false);
+    expect((await post("/api/brand/pay", { licenceId })).status).toBe(429);
+  });
+
   it("logging out ends the session; repeated login attempts from one address are rate limited", async () => {
     const out = await post("/api/logout", {});
     expect(out.headers.get("set-cookie")).toMatch(/Max-Age=0/);

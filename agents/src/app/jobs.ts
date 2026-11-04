@@ -5,7 +5,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { fullPrompt, videoPoster } from "../ai/generate.js";
-import type { Hex } from "viem";
+import type { Hex, PublicClient } from "viem";
 import { Refused } from "../brand-agent/agent.js";
 import type { LogEvent, MessageLog } from "../log.js";
 import type { Runtime } from "./runtime.js";
@@ -44,6 +44,56 @@ export interface PaymentJob {
 }
 
 const FINAL = new Set(["payment-safe", "payment-finalized", "payment-failed"]);
+
+/**
+ * On Ethereum Sepolia HashKey QA reported payment-safe ("half of the required block confirmations") about
+ * 12 blocks after the payment's block in the live runs of 2 Nov (144 s and 156 s); blocks come every 12 s.
+ */
+export const SAFE_CONFIRMATIONS = Number(process.env.HSP_SAFE_CONFIRMATIONS ?? 12);
+const BLOCK_SECONDS: Record<number, number> = { 11155111: 12 };
+
+export interface ConfirmationView {
+  count: number;
+  target: number;
+  /** Seconds until the target at the chain's block time; HSP's next status check (every 15 s) comes on top. */
+  etaSeconds: number;
+}
+
+/** Blocks since a payment's block, while the brand waits for HSP to report it safe. Chains with a known block time only. */
+export class Confirmations {
+  private readonly blocks = new Map<string, bigint>();
+  private head?: { at: number; n: bigint };
+  private readonly blockSeconds: number | undefined;
+
+  constructor(
+    private readonly pub: PublicClient,
+    chainId: number,
+    readonly target = SAFE_CONFIRMATIONS,
+  ) {
+    this.blockSeconds = BLOCK_SECONDS[chainId];
+  }
+
+  async of(tx: Hex): Promise<ConfirmationView | undefined> {
+    if (!this.blockSeconds) return undefined;
+    try {
+      let block = this.blocks.get(tx);
+      if (block === undefined) {
+        const r = await this.pub.getTransactionReceipt({ hash: tx }).catch(() => undefined);
+        if (!r) return undefined;
+        this.blocks.set(tx, (block = r.blockNumber));
+      }
+      // The head at most every 3 s, and never backwards (a lagging node of a load-balanced RPC answers older).
+      if (!this.head || Date.now() - this.head.at > 3000) {
+        const n = await this.pub.getBlockNumber({ cacheTime: 0 });
+        this.head = { at: Date.now(), n: this.head && this.head.n > n ? this.head.n : n };
+      }
+      const count = Math.max(0, Number(this.head.n - block) + 1);
+      return { count, target: this.target, etaSeconds: Math.max(0, this.target - count) * this.blockSeconds };
+    } catch {
+      return undefined;
+    }
+  }
+}
 
 /** HSP's statuses for one flow, as the creator's agent saw them through query_payment. */
 export function hspStatuses(log: MessageLog, flowId: string | undefined) {

@@ -14,7 +14,7 @@ import { SignIn } from "@/components/site/SignIn";
 import { Field, inputClass } from "@/components/ui";
 import { api, type BundleView, type CreatorView } from "@/lib/api";
 import { categoriesOf, displayOf } from "@/lib/demo";
-import { chainLabel } from "@/lib/chain";
+import { chainLabel, tokenOf } from "@/lib/chain";
 
 export function CreatorProfile({ address }: { address: string | undefined }) {
   const { state } = useAppState();
@@ -107,7 +107,7 @@ export function CreatorProfile({ address }: { address: string | undefined }) {
               <dl className="m-0 grid grid-cols-[9rem_1fr] gap-x-4 gap-y-2 text-[14px]">
                 <dt className="text-grey-dark">Price</dt>
                 <dd className="m-0 font-semibold">
-                  {t.price} {state?.token ?? "USDT"} per render
+                  {t.price} {tokenOf(state)} per render
                 </dd>
                 <dt className="text-grey-dark">Uses</dt>
                 <dd className="m-0 flex flex-wrap gap-1.5">
@@ -176,7 +176,7 @@ export function CreatorProfile({ address }: { address: string | undefined }) {
                 </Field>
               </div>
               <p className="m-0 text-[14px]">
-                Total up to <b>{t ? total.toFixed(2) : "…"} {state?.token ?? "USDT"}</b>
+                Total up to <b>{t ? total.toFixed(2) : "…"} {tokenOf(state)}</b>
                 <span className="text-grey">, paid per image or video when each is made</span>
               </p>
               <p className="m-0 text-[13px] text-grey">

@@ -143,6 +143,20 @@ function accountsFor(o: {
 export const ADVERTISING = 1 << 8;
 
 /**
+ * A dedicated RPC for the deployment's chain (a provider URL with its key), from the root-only file named by
+ * LIKENESS_RPC_URL_FILE (on the server, /run/likeness/rpc-url, from Secret Manager); the deployment file's
+ * public RPC without it. The URL holds a key: it's never logged or shown.
+ */
+export function deploymentRpc(): string | undefined {
+  const file = process.env.LIKENESS_RPC_URL_FILE;
+  if (!file || !existsSync(file)) return undefined;
+  const url = readFileSync(file, "utf8").trim();
+  if (!url) return undefined;
+  if (!url.startsWith("https://")) throw new Error("LIKENESS_RPC_URL_FILE must hold an https:// URL");
+  return url;
+}
+
+/**
  * AI image and video ads on Vertex AI when LIKENESS_AI=vertex (each render is a paid call; no API key:
  * the VM's service account or the likeness-hsk gcloud configuration); otherwise the marked TEST RENDER.
  */
@@ -234,7 +248,7 @@ export async function startRuntime(opts: { mode: Mode; root: string; publicUrl: 
   if (opts.mode !== "mainnet" && [177, 1].includes(Number(dep.chainId))) throw new Error(`deployment ${process.env.LIKENESS_DEPLOYMENT} is on a mainnet (chain ${dep.chainId}); not in ${opts.mode} mode`);
   const d: Deployment = {
     chainId: dep.chainId,
-    rpcUrl: dep.rpcUrl,
+    rpcUrl: deploymentRpc() ?? dep.rpcUrl,
     explorer: dep.explorer,
     hspNetwork: dep.hspNetwork,
     creators: dep.creators,
@@ -406,7 +420,8 @@ const licenceIssued = parseAbiItem(
 );
 
 /** HSK testnet's RPC answers eth_getLogs for ranges under ~5,000 blocks. */
-const LOG_CHUNK = 4_000n;
+// LIKENESS_LOG_CHUNK: smaller for an RPC provider with a tighter eth_getLogs range limit.
+const LOG_CHUNK = BigInt(process.env.LIKENESS_LOG_CHUNK ?? 4_000);
 /** Blocks behind the reported head that log reads stop at (a lagging node may not have the newest ones yet). */
 const HEAD_MARGIN = 2n;
 

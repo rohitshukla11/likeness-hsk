@@ -13,7 +13,7 @@ import { IconCheck, IconCross, IconQuestion, IconUpload } from "@/components/ds/
 import { Addr, fmtDate, fmtDay, inputClass, Tx } from "@/components/ui";
 import { api, sha256Hex, type CreatorView, type Verdict } from "@/lib/api";
 import { displayOf } from "@/lib/demo";
-import { chainLabel } from "@/lib/chain";
+import { chainLabel, tokenOf } from "@/lib/chain";
 import { useAppState } from "@/components/site/AppState";
 
 const LOOK = {
@@ -227,7 +227,7 @@ function Verify() {
                   </div>
                   <div>
                     <dt className="text-grey">Paid</dt>
-                    <dd className="m-0 mt-0.5 font-semibold">{result!.paid} {result!.tokenSymbol ?? state?.token ?? "USDT"} through HSP</dd>
+                    <dd className="m-0 mt-0.5 font-semibold">{result!.paid} {result!.tokenSymbol ?? tokenOf(state)} through HSP</dd>
                   </div>
                   <div>
                     <dt className="text-grey">Receipt anchored</dt>

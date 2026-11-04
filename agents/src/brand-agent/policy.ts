@@ -32,6 +32,9 @@ export class Budget {
   private day = "";
   private spent = 0n;
 
+  /** Today's limit: the policy's, unless the app raises it for a day (demo prep). */
+  limit: () => bigint = () => this.policy.dailyBudget;
+
   constructor(readonly policy: BrandPolicy, private readonly now: () => Date = () => new Date()) {}
 
   private roll() {
@@ -45,8 +48,9 @@ export class Budget {
   check(amount: bigint): Verdict {
     this.roll();
     if (amount > this.policy.maxPricePerRender) return { ok: false, reason: `amount ${amount} is above the per-render maximum` };
-    if (this.spent + amount > this.policy.dailyBudget) {
-      return { ok: false, reason: `daily budget: ${this.spent} of ${this.policy.dailyBudget} spent, ${amount} more would exceed it` };
+    const limit = this.limit();
+    if (this.spent + amount > limit) {
+      return { ok: false, reason: `daily budget: ${this.spent} of ${limit} spent, ${amount} more would exceed it` };
     }
     return { ok: true };
   }

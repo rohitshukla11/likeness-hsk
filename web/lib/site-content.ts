@@ -5,11 +5,11 @@
 
 export const MEASUREMENTS = {
   /**
-   * Not measured on HSK Chain: null hides the card (no number without a measurement).
+   * Not measured on the live chain: null hides the card (no number without a measurement).
    */
   registerMs: {
     value: null as number | null,
-    source: "not measured on HSK Chain: the card is hidden",
+    source: "not measured on the live chain: the card is hidden",
   },
   /** By construction: a render is anchored only after HspSettlement recorded its payment, and files are released only after that. */
   rendersWithReceipt: {
@@ -23,4 +23,5 @@ export type Testimonial = { quote: string; name: string; role: string };
 /** Real, attributed quotes only. Leave empty until there are some: the section is then not rendered. */
 export const TESTIMONIALS: Testimonial[] = [];
 
-export const BUILT_ON = ["HSK Chain", "HSP", "A2A", "AP2", "MCP", "Permit2", "Safe"];
+// The live rail: Circle's USDC on Ethereum Sepolia through HashKey QA, paid by EIP-3009 authorizations.
+export const BUILT_ON = ["HSP", "HSK Chain", "Ethereum Sepolia", "A2A", "AP2", "MCP", "EIP-3009", "Safe"];

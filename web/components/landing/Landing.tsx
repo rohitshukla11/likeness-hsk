@@ -162,8 +162,8 @@ function Stats() {
             {MEASUREMENTS.registerMs.value !== null && (
               <article className={`rv${seen ? " in" : ""} flex flex-1 flex-col gap-1.5 rounded-[30px] bg-lime bg-[url(/landing/card-lime.png)] bg-cover bg-center p-7 text-ink`} style={{ transitionDelay: ".25s" }} title={MEASUREMENTS.registerMs.source}>
                 <span className="tnum font-display text-[clamp(40px,5vw,52px)] font-black leading-none">{ms} MS</span>
-                <span className="font-display text-[17px] font-bold leading-snug">TO REGISTER A CREATOR ON HSK CHAIN</span>
-                <span className="text-[13px] text-[#3E4148]">Measured on HSK Chain, send to receipt.</span>
+                <span className="font-display text-[17px] font-bold leading-snug">TO REGISTER A CREATOR ON CHAIN</span>
+                <span className="text-[13px] text-[#3E4148]">Measured on chain, send to receipt.</span>
               </article>
             )}
             <article className={`rv${seen ? " in" : ""} flex flex-1 flex-col gap-1.5 rounded-[30px] bg-ink-line p-7 text-white`} style={{ transitionDelay: ".4s" }} title={MEASUREMENTS.rendersWithReceipt.source}>
@@ -183,7 +183,7 @@ function Stats() {
 const STEPS = [
   { title: "SET YOUR TERMS", body: "A price per render, uses, regions, a cap and a maximum duration, in CreatorRegistry, on chain. Political, adult and deceptive uses are banned in the contract." },
   { title: "AGENTS AGREE", body: "A brand's agent asks your agent for a licence over A2A. Your agent checks it against your on-chain terms, and the licence is issued on chain." },
-  { title: "PAID THROUGH HSP", body: "For each render your agent creates an HSP order paid to you. The brand approves twice, signs exactly what HSP returned, and HSP settles it on HSK Chain." },
+  { title: "PAID THROUGH HSP", body: "For each render your agent creates an HSP order paid to you. The brand approves twice, signs exactly what HSP returned, and HSP settles it on chain: Ethereum Sepolia during the hackathon, HSK Chain mainnet after." },
   { title: "RECEIPT, OR REVOKE", body: "Each paid render is recorded in HspSettlement and gets a receipt anyone can verify. Revoke and the next render is refused before anything is signed." },
 ];
 

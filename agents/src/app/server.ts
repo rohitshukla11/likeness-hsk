@@ -17,9 +17,10 @@ import { claimMessage, ClaimError, verifyClaim } from "./claim.js";
 import { HSP_MCP_URL, HspAgentic, MERCHANT_NAME } from "../hsp/agentic/client.js";
 import { rehearsalQa } from "../hsp/agentic/qaRehearsal.js";
 import { LIVE_QA_LABEL, LiveQa } from "./liveQa.js";
-import { hspStatuses, PaymentJobs } from "./jobs.js";
-import { ADVERTISING, CREATOR_MAX_PRICE, listLicences, listPayments, startRuntime, VIDEO_MULTIPLIER, type Mode, type Runtime } from "./runtime.js";
+import { Confirmations, hspStatuses, PaymentJobs } from "./jobs.js";
+import { ADVERTISING, CREATOR_MAX_PRICE, deploymentRpc, listLicences, listPayments, startRuntime, VIDEO_MULTIPLIER, type Mode, type Runtime } from "./runtime.js";
 import { clientIp, guardFromEnv, type Guard } from "./guard.js";
+import { DemoPrep, type Limits } from "./demoPrep.js";
 import { deploymentsDir } from "../chain/networks.js";
 import { SITE, type Account, type AdKind } from "./accounts.js";
 import { bearer } from "./firebase.js";
@@ -45,7 +46,7 @@ let liveQa: LiveQa | undefined;
 function liveQaFor(rt: Runtime): LiveQa | undefined {
   const flag = process.env.HSP_QA_LIVE_RUN;
   if ((flag !== "1" && flag !== "rehearsal") || rt.mode === "mainnet") return undefined;
-  const sepolia = createPublicClient({ transport: http(process.env.SEPOLIA_RPC_URL ?? "https://ethereum-sepolia-rpc.publicnode.com") });
+  const sepolia = createPublicClient({ transport: http(process.env.SEPOLIA_RPC_URL ?? (rt.chain.d.chainId === 11155111 ? deploymentRpc() : undefined) ?? "https://ethereum-sepolia-rpc.publicnode.com") });
   const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
   return (liveQa ??= new LiveQa({
     connect: flag === "1" ? () => HspAgentic.connectQa(HSP_MCP_URL, { liveRun: true }) : () => rehearsalQa(),
@@ -86,17 +87,33 @@ const jobs = (rt: Runtime, guard?: Guard) =>
   ),
   jobsOf.get(rt)!);
 
+/** Sepolia confirmations of each payment while the brand waits for HSP's payment-safe, one counter per runtime. */
+const confirmationsOf = new WeakMap<Runtime, Confirmations>();
+const confirmations = (rt: Runtime) => confirmationsOf.get(rt) ?? (confirmationsOf.set(rt, new Confirmations(rt.chain.public, rt.chain.d.chainId)), confirmationsOf.get(rt)!);
+
 /** Ads a day (UTC) per signed-in brand account (they share the demo agent wallet) and across the server. */
 export const BRAND_CAPS: Record<AdKind, number> = { image: Number(process.env.LIKENESS_BRAND_IMAGES ?? 3), video: Number(process.env.LIKENESS_BRAND_VIDEOS ?? 1) };
 export const SITE_CAPS: Record<AdKind, number> = { image: Number(process.env.LIKENESS_SITE_IMAGES ?? 10), video: Number(process.env.LIKENESS_SITE_VIDEOS ?? 2) };
 const kindOf = (v: unknown): AdKind => (v === "video" ? "video" : "image");
+
+/** One demo prep per runtime (the admin's raised limits for a UTC day); it also sets the brand agent's budget. */
+const prepOf = new WeakMap<Runtime, DemoPrep>();
+function prepFor(rt: Runtime, guard?: Guard): DemoPrep {
+  let p = prepOf.get(rt);
+  if (!p) {
+    const prep = new DemoPrep({ brand: BRAND_CAPS, site: SITE_CAPS, paidRenders: guard?.cap.max ?? 0, dailyBudget: rt.brand.budget.policy.dailyBudget }, guard?.prepFile);
+    rt.brand.budget.limit = () => prep.limits().dailyBudget;
+    prepOf.set(rt, (p = prep));
+  }
+  return p;
+}
 const EXT: Record<string, string> = { "image/svg+xml": ".svg", "image/jpeg": ".jpg", "image/png": ".png", "video/mp4": ".mp4" };
 
 /** Why another ad of this kind can't be made today, or null. Checked before any payment. */
-function capRefusal(rt: Runtime, kind: AdKind, uid: string | undefined): string | null {
+function capRefusal(rt: Runtime, caps: Limits, kind: AdKind, uid: string | undefined): string | null {
   const what = kind === "video" ? "video ads" : "image ads";
-  if (uid && rt.accounts.aiUsed(uid, kind) >= BRAND_CAPS[kind]) return `your account has made today's ${BRAND_CAPS[kind]} ${what} (UTC day); try again after 00:00 UTC`;
-  if (rt.accounts.aiUsed(SITE, kind) >= SITE_CAPS[kind]) return `Likeness has made today's ${SITE_CAPS[kind]} ${what} across all brands; try again after 00:00 UTC`;
+  if (uid && rt.accounts.aiUsed(uid, kind) >= caps.brand[kind]) return `your account has made today's ${caps.brand[kind]} ${what} (UTC day); try again after 00:00 UTC`;
+  if (rt.accounts.aiUsed(SITE, kind) >= caps.site[kind]) return `Likeness has made today's ${caps.site[kind]} ${what} across all brands; try again after 00:00 UTC`;
   return null;
 }
 
@@ -137,7 +154,7 @@ async function creatorView(rt: Runtime, address: Address) {
 }
 
 /** The signed-in account, with its creator profile or brand caps. */
-function meView(rt: Runtime, me: Account) {
+function meView(rt: Runtime, me: Account, caps: Limits) {
   const c = rt.accounts.creator(me.uid);
   return {
     account: me,
@@ -154,7 +171,7 @@ function meView(rt: Runtime, me: Account) {
           agentTx: c.agentTx,
         }
       : null,
-    brand: me.role === "brand" ? { image: { used: rt.accounts.aiUsed(me.uid, "image"), cap: BRAND_CAPS.image }, video: { used: rt.accounts.aiUsed(me.uid, "video"), cap: BRAND_CAPS.video } } : null,
+    brand: me.role === "brand" ? { image: { used: rt.accounts.aiUsed(me.uid, "image"), cap: caps.brand.image }, video: { used: rt.accounts.aiUsed(me.uid, "video"), cap: caps.brand.video } } : null,
   };
 }
 
@@ -232,6 +249,7 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
   const url = new URL(req.url ?? "/", "http://x");
   const path = url.pathname;
   const ip = guard ? clientIp(req) : "";
+  const prep = prepFor(rt, guard);
   if (guard && !guard.reads.allow(ip)) return json(res, 429, { error: "too many requests from this address; try again in a minute" });
   // A creator's photo arrives as base64 JSON (up to 3 MB of image).
   const raw = req.method === "POST" ? await readBody(req, path === "/api/me/creator/photo" ? 5 << 20 : undefined) : "";
@@ -301,6 +319,18 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
     }
   }
 
+  // ---------------------------------------------------------------- the admin's demo prep (raised limits for today, UTC)
+  if (path === "/api/admin/demo-prep") {
+    if (!isOperator) return json(res, 401, { error: "admin only: sign in with the demo password at /admin" });
+    if (req.method === "GET") return json(res, 200, prep.view());
+    if (req.method === "POST") {
+      const action = parse(raw).action;
+      if (action === "raise") return json(res, 200, prep.raise());
+      if (action === "restore") return json(res, 200, prep.restore());
+      return json(res, 400, { error: "action is raise or restore" });
+    }
+  }
+
   // ---------------------------------------------------------------- pages and assets
   if (req.method === "GET" && (PAGES[path] || path.startsWith("/static/"))) {
     const file = PAGES[path] ?? normalize(path.slice("/static/".length)).replace(/^(\.\.[/\\])+/, "");
@@ -317,6 +347,7 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
   const d = rt.chain.d;
   if (req.method === "GET" && path === "/api/state") {
     const t = await rt.chain.terms(rt.creator);
+    const limits = prep.limits();
     return json(res, 200, {
       mode: rt.mode,
       gateway: rt.gateway,
@@ -324,8 +355,10 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
       operator: isOperator,
       // The public server asks for the demo password; caps are shown so nobody is surprised by a refusal.
       login: guard ? { required: true } : null,
-      policy: { maxPricePerRender: usdValue(rt.brand.budget.policy.maxPricePerRender), dailyBudget: usdValue(rt.brand.budget.policy.dailyBudget) },
-      cap: guard ? { max: guard.cap.max, paidToday: guard.cap.count() } : null,
+      policy: { maxPricePerRender: usdValue(rt.brand.budget.policy.maxPricePerRender), dailyBudget: usdValue(limits.dailyBudget) },
+      cap: guard ? { max: limits.paidRenders, paidToday: guard.cap.count() } : null,
+      // The admin's demo prep: raised limits until the next 00:00 UTC.
+      demoPrep: (({ active, until }) => ({ active, until }))(prep.view()),
       // Google sign-in for brands and creators; the demo password is the admin fallback.
       signIn: { google: true },
       demoCreator: showDemoCreator(),
@@ -333,11 +366,13 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
       ads: {
         ai: !!rt.ai,
         videoMultiplier: Number(VIDEO_MULTIPLIER),
-        brandCaps: BRAND_CAPS,
-        siteCaps: SITE_CAPS,
+        brandCaps: limits.brand,
+        siteCaps: limits.site,
         usedToday: { image: rt.accounts.aiUsed(SITE, "image"), video: rt.accounts.aiUsed(SITE, "video") },
       },
       chainId: d.chainId,
+      // A dedicated RPC provider (its URL holds a key, never shown) or the deployment file's public RPC.
+      rpc: deploymentRpc() ? "dedicated" : "public",
       explorer: d.explorer ?? null,
       contracts: { creators: d.creators, licences: d.licences, receipts: d.receipts, settlement: d.settlement, token: d.token },
       token: d.tokenSymbol,
@@ -373,7 +408,7 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
   // ---------------------------------------------------------------- the signed-in account (Google)
   if (path === "/api/me" || path.startsWith("/api/me/")) {
     if (!me) return json(res, token ? 401 : 200, token ? { error: "sign in with Google" } : { account: null });
-    if (req.method === "GET" && path === "/api/me") return json(res, 200, meView(rt, me));
+    if (req.method === "GET" && path === "/api/me") return json(res, 200, meView(rt, me, prep.limits()));
     if (req.method !== "POST") return json(res, 404, { error: "not found" });
     if (guard && !guard.actions.allow(ip)) return json(res, 429, { error: "too many actions from this address; try again in a minute" });
     const body = parse(raw);
@@ -384,18 +419,18 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
         if (me.role && me.role !== role) return json(res, 409, { error: `this account is already a ${me.role}; use another Google account for the other role` });
         me = rt.accounts.setRole(me.uid, role);
         if (role === "creator") rt.onboarding.start(me.uid, me.name);
-        return json(res, 200, meView(rt, me));
+        return json(res, 200, meView(rt, me, prep.limits()));
       }
       if (path.startsWith("/api/me/creator/")) {
         if (me.role !== "creator") return json(res, 403, { error: "choose Creator first" });
         rt.onboarding.start(me.uid, me.name);
         if (path === "/api/me/creator/youtube") {
           await rt.onboarding.connectYoutube(me.uid, await youtubeChannel(String(body.accessToken ?? ""), me.email));
-          return json(res, 200, meView(rt, me));
+          return json(res, 200, meView(rt, me, prep.limits()));
         }
         if (path === "/api/me/creator/photo") {
           rt.onboarding.savePhoto(me.uid, Buffer.from(String(body.data ?? ""), "base64"), body.consent === true);
-          return json(res, 200, meView(rt, me));
+          return json(res, 200, meView(rt, me, prep.limits()));
         }
         if (path === "/api/me/creator/register") {
           const price = parseUnits(String(body.price ?? "0"), 6);
@@ -408,7 +443,7 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
           const payout = body.payout ? String(body.payout) : undefined;
           if (payout && !ADDRESS.test(payout)) return json(res, 400, { error: "payout must be a 0x address" });
           await rt.onboarding.register(me.uid, { priceUnits: price, categories: cats.reduce((a, c) => a | c, 0), maxRenders, payout: payout as Address | undefined }, body.adult === true);
-          return json(res, 200, meView(rt, me));
+          return json(res, 200, meView(rt, me, prep.limits()));
         }
       }
     } catch (e) {
@@ -624,7 +659,7 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
         // A revoked, expired or used-up licence goes straight to the brand agent's refusal (nothing signed);
         // caps and the brief check apply to licences that can still be paid.
         if ((await rt.chain.status(BigInt(body.licenceId ?? "0"))) === "Active") {
-          const capped = capRefusal(rt, meta.kind, acct?.uid);
+          const capped = capRefusal(rt, prep.limits(), meta.kind, acct?.uid);
           if (capped) return json(res, 429, { error: capped });
           // The creator's allowed uses (they may have changed their terms since the licence) and the
           // prompt's own check: banned uses and fit with advertising. Nothing is signed if either fails.
@@ -637,7 +672,8 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
         }
         if (guard) {
           if ([...jobs(rt, guard).jobs.values()].some((j) => j.state === "paying")) return json(res, 409, { error: "another payment is in progress; try again when it finishes" });
-          if (guard.cap.count() >= guard.cap.max) return json(res, 429, { error: `today's cap is reached: ${guard.cap.max} paid renders a day (UTC)` });
+          const max = prep.limits().paidRenders;
+          if (guard.cap.count() >= max) return json(res, 429, { error: `today's cap is reached: ${max} paid renders a day (UTC)` });
         }
         const job = jobs(rt, guard).start(BigInt(body.licenceId ?? "0"), brief, acct?.uid, meta.kind, prompts);
         return json(res, 200, { jobId: job.id, fromSeq: rt.log.events.at(-1)?.seq ?? 0 });
@@ -647,7 +683,11 @@ export async function handle(rt: Runtime, req: IncomingMessage, res: ServerRespo
         if (!job || (acct && job.owner !== acct.uid)) return json(res, 404, { error: "no such payment" });
         const statuses = hspStatuses(rt.log, job.flowId);
         const last = statuses.at(-1);
-        return json(res, 200, { job, approvals: rt.approvals.list(), statuses, tx: job.hspTx ?? last?.tx ?? null, attribution: last?.attribution ?? null, toSeq: rt.log.events.at(-1)?.seq ?? 0 });
+        const tx = job.hspTx ?? last?.tx ?? null;
+        // Broadcast, not yet safe: the payment's confirmations so far, toward the point HSP reports it safe.
+        const waiting = job.state === "submitted" && !!tx && !["payment-safe", "payment-finalized", "payment-failed"].includes(last?.status ?? "");
+        const conf = waiting ? ((await confirmations(rt).of(tx as Hex)) ?? null) : null;
+        return json(res, 200, { job, approvals: rt.approvals.list(), statuses, tx, confirmations: conf, attribution: last?.attribution ?? null, toSeq: rt.log.events.at(-1)?.seq ?? 0 });
       }
       if (req.method === "POST" && path === "/api/brand/approve") {
         // The pending approvals belong to the payment in progress: only its brand account answers them.
@@ -713,7 +753,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     handle(rt, req, res).catch((e) => json(res, 500, { error: (e as Error).message.split("\n")[0] }));
   });
   server.listen(port, "127.0.0.1", () => {
-    console.log(`Likeness app (${mode}, gateway: ${rt.gateway}, operator: ${operator}${publicGuard ? ", public: demo password, rate limits, daily cap" : ""}) on ${publicUrl}`);
+    console.log(`Likeness app (${mode}, gateway: ${rt.gateway}, rpc: ${deploymentRpc() ? "dedicated" : "public"}, operator: ${operator}${publicGuard ? ", public: demo password, rate limits, daily cap" : ""}) on ${publicUrl}`);
   });
   const stop = () => {
     server.close();

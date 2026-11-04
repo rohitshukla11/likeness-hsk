@@ -8,7 +8,7 @@ const display = Unbounded({ subsets: ["latin"], weight: ["700", "800", "900"], v
 const body = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-body-face", display: "swap" });
 
 const TAGLINE = "License your face to AI. Your terms, paid per image.";
-const DESCRIPTION = `${TAGLINE} A brand's AI agent licenses a creator's likeness from the creator's own agent over A2A and pays per render through HSP; consent is checked before any money moves. HSK Chain testnet.`;
+const DESCRIPTION = `${TAGLINE} A brand's AI agent licenses a creator's likeness from the creator's own agent over A2A and pays per render through HSP; consent is checked before any money moves. Built for HSK Chain; live through HashKey's HSP QA on Ethereum Sepolia (testnet USDC) during the hackathon.`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),

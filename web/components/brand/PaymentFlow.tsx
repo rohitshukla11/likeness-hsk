@@ -6,13 +6,39 @@
  * and "Behind the scenes": every A2A message, mandate and HSP call, raw.
  */
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { btnClass, Card, StatusPill } from "@/components/ds";
 import { IconCheck } from "@/components/ds/icons";
 import { Tx } from "@/components/ui";
-import { HSP_STATES, rawToDecimal, type Approval, type JobView, type LogEvent } from "@/lib/api";
+import { HSP_STATES, rawToDecimal, type Approval, type ConfirmationView, type JobView, type LogEvent } from "@/lib/api";
 import { hspLabel } from "@/lib/chain";
 import { useAppState } from "@/components/site/AppState";
 import { AGENTIC_STEPS } from "@/lib/steps";
+
+/** A quote's time left, live: amber under a minute, "expired" after (HSP prepares a new quote). */
+export function QuoteCountdown({ expiresAt }: { expiresAt: string }) {
+  const end = Date.parse(expiresAt);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const left = Math.max(0, Math.floor((end - now) / 1000));
+  if (Number.isNaN(end)) return <>{expiresAt}</>;
+  const at = new Date(end).toLocaleTimeString();
+  return (
+    <span className="tnum" role="timer" aria-live="off">
+      {left > 0 ? (
+        <b className={left < 60 ? "text-[#8a4b00]" : undefined}>
+          {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")} left
+        </b>
+      ) : (
+        <b className="text-[#a3261b]">expired</b>
+      )}{" "}
+      <span className="text-[#3E4148]">(at {at})</span>
+    </span>
+  );
+}
 
 export function ApprovalPanel({ a, onDecide, busy }: { a: Approval; onDecide: (id: string, approve: boolean) => void; busy: boolean }) {
   const sign = a.stage === "sign";
@@ -36,7 +62,9 @@ export function ApprovalPanel({ a, onDecide, busy }: { a: Approval; onDecide: (i
         <dt className="text-[#3E4148]">Network fee</dt>
         <dd className="m-0">{a.gasFeeAdvanced === true ? "advanced by the platform, not in the total" : a.gasFeeAdvanced === false ? "included in the total" : "not stated"}</dd>
         <dt className="text-[#3E4148]">Quote expires</dt>
-        <dd className="m-0">{new Date(a.quoteExpiresAt).toLocaleTimeString()}</dd>
+        <dd className="m-0">
+          <QuoteCountdown expiresAt={a.quoteExpiresAt} />
+        </dd>
       </dl>
       <p className="m-0 text-[13px] text-[#3E4148]">
         {sign ? "The brand wallet will sign exactly the authorization HSP returned. Nothing is sent yet." : "HSP will broadcast the payment. The amount is an authorization, not funds received."}
@@ -85,7 +113,30 @@ export function HspStatusList({ view }: { view: JobView }) {
         <dt className="text-grey">transaction</dt>
         <dd className="m-0">{view.tx ? <Tx hash={view.tx} /> : "not broadcast yet"}</dd>
       </dl>
+      {view.confirmations && <ConfirmationProgress c={view.confirmations} />}
     </Card>
+  );
+}
+
+/** The payment's confirmations on chain while HSP hasn't reported it safe yet. */
+export function ConfirmationProgress({ c }: { c: ConfirmationView }) {
+  const shown = Math.min(c.count, c.target);
+  const mins = Math.ceil(c.etaSeconds / 60);
+  return (
+    <div className="flex flex-col gap-1.5" aria-label="Confirmations">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-[14px]">
+        <span>
+          Sepolia confirmations <b className="tnum">{shown}/{c.target}</b>
+        </span>
+        <span className="text-[13px] text-grey">
+          {c.etaSeconds > 0 ? `~${mins} min left` : "waiting for HSP's next status check (every 15 s)"}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-[#ECEEE8]" role="progressbar" aria-valuemin={0} aria-valuemax={c.target} aria-valuenow={shown}>
+        <div className="h-full rounded-full bg-[#3b6e25] transition-[width] duration-700" style={{ width: `${(shown / c.target) * 100}%` }} />
+      </div>
+      <span className="text-[12px] text-grey">HashKey QA reports payment-safe at about {c.target} blocks (12 s each); the payment is recorded and the ad made only then.</span>
+    </div>
   );
 }
 

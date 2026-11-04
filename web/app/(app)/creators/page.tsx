@@ -7,7 +7,7 @@ import { CreatorCard } from "@/components/market/CreatorCard";
 import { useAppState } from "@/components/site/AppState";
 import { api, type CreatorView } from "@/lib/api";
 import { categoriesOf, displayOf } from "@/lib/demo";
-import { chainLabel } from "@/lib/chain";
+import { chainLabel, tokenOf } from "@/lib/chain";
 
 export default function CreatorsPage() {
   const { state } = useAppState();
@@ -21,7 +21,7 @@ export default function CreatorsPage() {
         {list ? (
           // Real creators first, then the synthetic demo creator.
           [...list].sort((a, b) => Number(a.synthetic) - Number(b.synthetic)).map((c) => (
-            <CreatorCard key={c.address} c={{ ...displayOf(c), price: `${c.terms.price} ${state?.token ?? "USDT"}`, uses: categoriesOf(c.terms.categories), autoApprove: c.terms.autoApprove }} />
+            <CreatorCard key={c.address} c={{ ...displayOf(c), price: `${c.terms.price} ${tokenOf(state)}`, uses: categoriesOf(c.terms.categories), autoApprove: c.terms.autoApprove }} />
           ))
         ) : (
           <Skeleton className="h-[460px]" />

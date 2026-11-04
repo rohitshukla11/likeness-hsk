@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { btnClass, Card } from "@/components/ds";
+import { QuoteCountdown } from "@/components/brand/PaymentFlow";
 import { api, rawToDecimal } from "@/lib/api";
 
 type Approval = { stage: "sign" | "submit"; payTo: string; payer: string; tokenTotalRaw: string; token: { address: string; decimals: number; symbol: string }; quoteExpiresAt: string; gasFeeAdvanced?: boolean };
@@ -122,7 +123,9 @@ export function LiveQaPayment() {
                 <dt className="text-grey">Network fee</dt>
                 <dd className="m-0">{run.ask.approval.gasFeeAdvanced === true ? "advanced by the platform (not in the total)" : run.ask.approval.gasFeeAdvanced === false ? "included in the total" : "not stated"}</dd>
                 <dt className="text-grey">Quote expires</dt>
-                <dd className="m-0">{run.ask.approval.quoteExpiresAt}</dd>
+                <dd className="m-0">
+                  <QuoteCountdown expiresAt={run.ask.approval.quoteExpiresAt} />
+                </dd>
               </dl>
               <span className="flex gap-2">
                 <button type="button" disabled={busy} onClick={() => void answer(true)} className={btnClass("ink")}>

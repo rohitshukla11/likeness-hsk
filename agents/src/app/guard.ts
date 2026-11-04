@@ -89,6 +89,8 @@ export interface Guard {
   actions: RateLimit;
   logins: RateLimit;
   cap: DailyCap;
+  /** Where the admin's demo prep (raised limits for one UTC day) is kept across restarts; in memory without it. */
+  prepFile?: string;
 }
 
 export function guardFromEnv(capFile: string): Guard | undefined {
@@ -101,6 +103,7 @@ export function guardFromEnv(capFile: string): Guard | undefined {
     actions: new RateLimit(20),
     logins: new RateLimit(5),
     cap: new DailyCap(capFile, Number(process.env.LIKENESS_DAILY_CAP ?? 20)),
+    prepFile: capFile.replace(/paid-today\.json$/, "demo-prep.json"),
   };
 }
 

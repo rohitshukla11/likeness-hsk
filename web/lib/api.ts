@@ -30,6 +30,9 @@ export type State = {
   brand: string;
   terms: { pricePerRender: string; price: string; maxRenders: number; categories: number; autoApprove: boolean };
   spentToday: string;
+  /** The admin's demo prep: raised daily limits until the next 00:00 UTC. */
+  demoPrep?: { active: boolean; until: string | null };
+  rpc?: "dedicated" | "public";
   agentic: { source: "hashkey-qa" | "emulator"; network: string; chainId: number; token: { address: string; decimals: number; symbol: string; protocol: string }; recordable: boolean; merchantName: string } | null;
 };
 
@@ -172,7 +175,9 @@ export type Job = {
   promptSha256?: string;
 };
 export type HspStatus = { at: string; summary: string; status: string; tx?: string; attribution?: boolean };
-export type JobView = { job: Job; approvals: Approval[]; statuses: HspStatus[]; tx: string | null; attribution: boolean | null; toSeq: number };
+/** Blocks since the payment's block, toward the point HSP reports it safe (Sepolia). */
+export type ConfirmationView = { count: number; target: number; etaSeconds: number };
+export type JobView = { job: Job; approvals: Approval[]; statuses: HspStatus[]; tx: string | null; confirmations?: ConfirmationView | null; attribution: boolean | null; toSeq: number };
 
 export type Verdict = {
   verdict: "Licensed" | "Revoked" | "Expired" | "Unknown";
