@@ -1,0 +1,8 @@
+#!/bin/sh
+# Rejects a commit message with a Co-authored-by trailer or any Claude attribution: commits here are
+# Rohit Shukla's alone. Enabled per clone with: git config core.hooksPath .githooks
+if grep -qiE 'co-authored-by|generated with \[?claude|noreply@anthropic\.com' "$1"; then
+  echo "commit-msg: refused, the message has a Co-authored-by trailer or Claude attribution:" >&2
+  grep -niE 'co-authored-by|generated with \[?claude|noreply@anthropic\.com' "$1" >&2
+  exit 1
+fi
