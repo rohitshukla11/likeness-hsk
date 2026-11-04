@@ -1,6 +1,8 @@
 # Demo day: 4 Nov 2026
 
-**The server is frozen: no deploys until 5 Nov, 05:30 IST (00:00 UTC).** The only changes allowed on the VM today
+**The server is frozen: no deploys until 5 Nov, 05:30 IST (00:00 UTC).** Deployed: `d56b124` (code `bf47f4f`), 4 Nov
+05:47 UTC; demo prep raised at 05:50 UTC (on until 00:00 UTC). Backups on the VM:
+`/opt/likeness/backups/before-demoday-20261104T054734Z`, `/opt/likeness/web-dist-before-20261104T054734Z`. The only changes allowed on the VM today
 are the ones written below (the RPC secret and its restart before T−60, the demo prep button, and the fallback
 switch). The live script is [submission/VIDEO_SCRIPT.md](submission/VIDEO_SCRIPT.md).
 
