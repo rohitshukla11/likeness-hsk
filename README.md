@@ -44,7 +44,8 @@ testnet deployment is kept, and Verify still answers for files made there.
   consented to their photo; the synthetic demo creator Ana Reyes (an illustration) is not shown there.
 - **Limits:** AI ads per UTC day: 3 images and 1 video per brand account, 10 images and 2 videos across the
   server; at most 0.05 test USDC per image and 0.15 per video (8 s); one payment at a time; per-address rate
-  limits. Everything is testnet: the tokens have no value.
+  limits. For a live demo the admin can raise these for one UTC day (`/admin` → Demo prep: 10 images and 4 videos
+  per brand, 20 and 6 across the server); they lapse at 00:00 UTC. Everything is testnet: the tokens have no value.
 - **Wallets:** payments come from the server's shared demo brand agent wallet (`0x8E9B246D…4DDec`) on behalf of
   every brand account; each creator gets a custodial testnet wallet, encrypted on the server. Brands and
   creators only ever sign in with Google; the demo password is just the admin fallback (`/admin`), for the team.
@@ -135,9 +136,9 @@ half the required confirmations). Every page's transaction links go to Etherscan
 5. [Revoked](https://testnet-explorer.hskchain.net/tx/0xaa9e88ffdec92bf549bc52ea6ea79dc8cc0706b77b2facb55925afede71e44d8)
    by the creator; the next payment is refused before the brand signs anything.
 
-**HSP Gateway: emulated until HashKey issues merchant credentials** (requested). The emulator follows
-HashKey's published Merchant API, and the app says so on every page. The real-Gateway path is built and
-switches on with one config file ([docs/HSP_SETUP.md](docs/HSP_SETUP.md)).
+**History:** until 1 Nov the main flow ran on this HSK testnet deployment, paid through our offline emulator of
+HSP. HashKey allowlisted the server on 1 Nov, and since 2 Nov the main flow runs live through HashKey QA on
+Ethereum Sepolia (above). The emulator is still used for local runs and the tests.
 
 ## Real HSP Agentic Payment on QA
 
@@ -190,11 +191,14 @@ to, and every licensed file can be checked later.
 | Track spec | Here |
 |---|---|
 | Receiving Agent | **Creator agent** (`agents/src/creator-agent`). It serves an A2A agent card (`/.well-known/agent-card.json`, AP2 merchant role) and JSON-RPC `message/send`. |
-| Payment conditions transmitted | The creator agent reads the creator's terms and the licence status on HSK Chain, creates the HSP order, and returns an **AP2 Cart Mandate**: x402 method data (chain, USDT, the creator's payout) and an ES256K `merchant_authorization` over the RFC 8785 cart hash. A revoked, expired or used-up licence gets no cart. |
-| Payment Agent constructs the Payment Mandate | **Brand agent** (`agents/src/brand-agent`). It checks the merchant's signature, that `pay_to` is the creator's payout on chain, that the amount is the licence price, and its policy (price cap, allowed uses, daily budget). Then it builds the **AP2 Payment Mandate**. |
-| Completes the wallet signature | The brand wallet signs a **Permit2** transfer for USDT (or **EIP-3009** for USDC.e), with a nonce bound to this licence and render, plus a signature tying the mandate to the cart. |
-| Verifies and executes through the HSP Gateway | **HSP client** (`agents/src/hsp`). It handles HMAC-signed merchant calls, submits the Payment Mandate, verifies the Gateway's signed webhooks, and polls status. |
+| Payment conditions transmitted | The creator agent reads the creator's terms and the licence status on chain. A revoked, expired or used-up licence gets no order. Otherwise it creates the HSP order with HSP Agentic Payment's `create_order` (MCP): `merchant_name` "Likeness", `pay_to` the creator's on-chain payout, the cart in USD, network and token from `get_chain_config` (Circle's USDC on Ethereum Sepolia). It returns `flow_id` and `payment_request_id` to the brand agent over A2A. |
+| Payment Agent constructs the Payment Mandate | **Brand agent** (`agents/src/brand-agent`). It checks the order with `get_order` (team, payee = the creator's payout on chain, price = the licence price, chain, token) and its policy (price cap, allowed uses, daily budget). Then `prepare_payment` returns the authorization to sign and `token_total_raw`, and `finalize_payment` returns the **AP2 Payment Mandate**. |
+| Completes the wallet signature | A person approves on the brand's Dashboard, then the brand wallet signs exactly the **EIP-3009** `eip712` HSP returned (USDC, a 5-minute quote). A second approval comes before submitting. |
+| Verifies and executes through the HSP Gateway | **HSP client** (`agents/src/hsp/agentic`). `submit_payment` hands HSP the Payment Mandate unchanged; HSP broadcasts the transfer to the creator's payout. The creator agent follows `query_payment` every 15 s to payment-safe, with `attribution_verified`. |
 | On-chain settlement | **HspSettlement** records the payment only if the brand's authorization **executed on chain**, then the render agent anchors the receipt. |
+
+The earlier HSP merchant REST path (HMAC-signed calls, an ES256K cart JWT, signed webhooks, Permit2 for USDT) is
+still in `agents/src/hsp`, built and tested but not used live (see Known limitations).
 
 ## Architecture
 
@@ -202,22 +206,26 @@ to, and every licensed file can be checked later.
 sequenceDiagram
     autonumber
     participant B as Brand agent (payment agent)
+    participant P as Person (brand Dashboard)
     participant C as Creator agent (receiving agent, HSP merchant)
-    participant H as HSP Gateway
-    participant S as HSK Chain (licence, settlement, receipt contracts)
+    participant H as HSP Agentic Payment (HashKey QA, MCP)
+    participant S as Ethereum Sepolia (licence, settlement, receipt contracts)
     participant R as Render agent
     B->>S: request licence (auto-approved within the creator's terms)
     B->>C: A2A message/send: render-payment for licence N
     C->>S: read terms and licence status (refuse if revoked, expired or used up)
-    C->>H: create order (HMAC) with the AP2 Cart Mandate (ES256K JWT)
-    C-->>B: Cart Mandate + payment request id
-    B->>S: check payee = creator's payout, amount = licence price, licence active
-    B->>H: AP2 Payment Mandate + EIP-3009 (or Permit2) signature
-    H->>S: execute the transfer: brand → creator's payout (USDC on Sepolia, USDT on HSK testnet)
-    H-->>C: signed webhook (payment-included / safe / finalized)
+    C->>H: create_order: pay_to = creator's payout, USDC from get_chain_config
+    C-->>B: flow_id, payment_request_id
+    B->>H: get_order and prepare_payment: eip712 to sign, token_total_raw
+    B->>P: approval 1: recipient, payer, amount (before signing)
+    B->>H: finalize_payment with the EIP-3009 signature, returns the AP2 Payment Mandate
+    B->>P: approval 2: the same three (before submitting)
+    B->>H: submit_payment (the Payment Mandate, unchanged)
+    H->>S: execute the transfer: brand → creator's payout (Circle USDC)
+    C->>H: query_payment every 15 s (payment-included, then payment-safe)
     C->>S: recordPayment(licence, render, nonce, tx): only if the nonce executed on chain
     R->>S: anchorRender(sha256 of the file), signed by the render agent
-    Note over B,S: The creator revokes → no cart, no signature, no payment
+    Note over B,S: The creator revokes → no order, no signature, no payment
 ```
 
 **Contracts** (`contracts/`, Solidity 0.8.30, Foundry):
@@ -251,7 +259,7 @@ after which both are refused before anything is signed; Verify shows the bundle 
   - the licence was active when the payment was recorded;
   - this is the licence's next render, within its cap;
   - the **licensee's own stablecoin authorization executed** (read from the token's nonce registry:
-    Permit2's nonce bitmap, or USDC.e's `authorizationState`);
+    USDC's EIP-3009 `authorizationState`, or Permit2's nonce bitmap);
   - with the bound nonce `keccak256(settlement, chainId, licenceId, renderIndex)`, it was **for exactly
     this render**;
   - no authorization pays for two renders;
@@ -271,7 +279,8 @@ after which both are refused before anything is signed; Verify shows the bundle 
   There's no escrow to drain and nothing to refund.
 - **Consent before money:** both agents check the licence on chain before a cart is made or a
   signature is given.
-- **Bounded approvals:** the brand approves Permit2 for a bounded amount (1.5 USDT), not unlimited.
+- **No standing approval:** each live payment is a one-time EIP-3009 authorization for exactly `token_total_raw`.
+  On the earlier Permit2 rail (USDT, HSK testnet), the brand's approval was bounded (1.5 USDT), not unlimited.
 - **Downloads need the licensee's wallet.** The licensee signs a dated claim, checked against the
   licence on chain, so knowing a file's hash isn't enough. This fixes a hole found in the audit of the
   earlier version.
@@ -334,7 +343,7 @@ after which both are refused before anything is signed; Verify shows the bundle 
 ```sh
 git clone --recurse-submodules https://github.com/rohitshukla11/likeness-hsk && cd likeness-hsk
 (cd contracts && forge build && forge test)            # 79 contract tests; fork suites run with HSK_RPC_URL / HSK_TESTNET_RPC_URL
-cd agents && pnpm install && pnpm test                 # 84 agent tests (anvil from Foundry needed)
+cd agents && pnpm install && pnpm test                 # 104 agent tests (anvil from Foundry needed)
 LIKENESS_MODE=local pnpm app                           # http://127.0.0.1:8788: a local chain, no keys needed
 LIKENESS_HSP=agentic LIKENESS_MODE=local pnpm app      # the same with HSP Agentic Payment (MCP emulator) and the approvals
 pnpm run vm keys && pnpm run vm setup                  # the public server's own testnet wallets (dry run; --broadcast sends)
@@ -367,6 +376,6 @@ cd ../web && pnpm install && pnpm build && pnpm start  # the web UI on http://lo
 | `agents/src/ai` | AI image and video ads on Vertex AI: prompts, the brief and prompt check, the burned-in label |
 | `agents/scripts` | `deploy`, `fund`, `safe`, `verify`, `run` (testnet or mainnet), `recover`, `hsp:check` |
 | `deployments/` | Public addresses and transaction hashes |
-| `docs/` | [HACKATHON](docs/HACKATHON.md) (reused vs new), [HSP_SETUP](docs/HSP_SETUP.md), [MAINNET_RUNBOOK](docs/MAINNET_RUNBOOK.md) |
+| `docs/` | [HACKATHON](docs/HACKATHON.md) (reused vs new), [HSP_SETUP](docs/HSP_SETUP.md), [MAINNET_RUNBOOK](docs/MAINNET_RUNBOOK.md), [DEMO_DAY](docs/DEMO_DAY.md) (the live demo checklist) |
 
 MIT licence.
