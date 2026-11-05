@@ -1,5 +1,8 @@
 # Likeness on HSK Chain
 
+> **Hackathon project (HSK Chain Horizon, Nov 2026). Demo server shut down; see the
+> [demo video](https://youtu.be/fhu-Uw2wYeE) and the [on-chain transactions](#live-on-ethereum-sepolia-through-hashkey-qa).**
+
 [![CI](https://github.com/rohitshukla11/likeness-hsk/actions/workflows/ci.yml/badge.svg)](https://github.com/rohitshukla11/likeness-hsk/actions/workflows/ci.yml)
 
 **Agent-to-agent licensing and per-render payments for AI ads that use a real person's face, paid
@@ -18,14 +21,15 @@ What is reused and what is new: [docs/HACKATHON.md](docs/HACKATHON.md).
 
 **Demo video:** https://youtu.be/fhu-Uw2wYeE
 
-## Try it: https://hsk.likeness.site
+## The demo server (offline)
 
-(Fallback address for the same server: https://35-254-5-116.sslip.io.)
+The public demo server (hsk.likeness.site) was shut down on 5 Nov 2026, after the hackathon, and its accounts,
+photos and renders were deleted; the links to it in this repo no longer work. This section records what it did.
 
-The full app, **live through HashKey's HSP Agentic Payment QA server on Ethereum Sepolia (testnet)**, paying in
-Circle's test USDC, as the organisers allow during the hackathon; see
-[Live on Ethereum Sepolia through HashKey QA](#live-on-ethereum-sepolia-through-hashkey-qa). The earlier HSK Chain
-testnet deployment is kept, and Verify still answers for files made there.
+The full app ran **live through HashKey's HSP Agentic Payment QA server on Ethereum Sepolia (testnet)**, paying in
+Circle's test USDC, as the organisers allowed during the hackathon; see
+[Live on Ethereum Sepolia through HashKey QA](#live-on-ethereum-sepolia-through-hashkey-qa). The contracts on both
+testnets remain on chain.
 
 **Sign in with Google** at the top right (email and profile only), then choose once per Google account:
 
@@ -149,7 +153,7 @@ prepares, signs exactly the `eip712` HSP returns, finalizes and submits, with **
 brand's Dashboard** (recipient, payer, `token_total_raw`) before signing and before submitting; the
 creator's agent follows `query_payment` every 15 s and reports the team attribution.
 
-**Status (2 Nov 2026): live.** HashKey allowlisted the server's address (35.254.5.116) on 1 Nov. From it we read
+**Status (2 Nov 2026): live** (the server was shut down on 5 Nov 2026). HashKey allowlisted the server's address (35.254.5.116) on 1 Nov. From it we read
 the eight live tools, diffed their schemas against the emulator's (no stops) and saved the chain config:
 [`hsp-qa-tools.json`](deployments/hsp-qa-tools.json), [`hsp-qa-schema-diff.txt`](deployments/hsp-qa-schema-diff.txt),
 [`hsp-qa-chain-config.json`](deployments/hsp-qa-chain-config.json). QA's test USDC for HSK testnet never reached

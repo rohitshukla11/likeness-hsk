@@ -1,5 +1,7 @@
 # What was reused, and what was built for HSK Chain Horizon
 
+> **Historical:** the demo server (hsk.likeness.site, 35.254.5.116) was shut down on 5 Nov 2026 after the hackathon; its links and commands no longer work.
+
 **Hackathon:** HSK Chain Horizon Hackathon (Mumbai), track "Agent Payments & A2A Settlement (HSP)".
 The rules allow projects built or rebuilt between 23 October and 1 November 2026. All times are UTC.
 

@@ -1,5 +1,7 @@
 # Demo day: 4 Nov 2026
 
+> **Historical:** the demo server (hsk.likeness.site, 35.254.5.116) was shut down on 5 Nov 2026 after the hackathon; its links and commands no longer work.
+
 **The server is frozen: no deploys until 5 Nov, 05:30 IST (00:00 UTC).** Deployed 4 Nov 05:47 UTC: the VM runs the code
 of `b7b9dec` (rewritten from `bf47f4f` on 4 Nov to drop a trailer: identical tree, so identical code), and the
 deployed tree is that of `b1b8c6c` (was `d56b124`); demo prep raised at 05:50 UTC (on until 00:00 UTC). Backups on the VM:

@@ -1,5 +1,7 @@
 # HSP Agentic Payment: live-run checklist (QA)
 
+> **Historical:** the demo server (hsk.likeness.site, 35.254.5.116) was shut down on 5 Nov 2026 after the hackathon; its links and commands no longer work.
+
 Start only after HashKey confirms the allowlisting. **Every QA request comes from the public server**
 (`likeness-hsk-vm`, static IP **35.254.5.116**); the Mac never contacts QA. `HSP_ALLOWLISTED=1` is set on the
 VM only. Steps a–c run on the VM over IAP SSH, as the app's user, in `/opt/likeness/agents`:
